@@ -73,9 +73,9 @@ export default function ExpenseModal({ isOpen, onClose, onSave, expense, default
     } else {
       setType(defaultType)
       const structure = EXPENSE_STRUCTURE[defaultType]
-      const firstCategory = Object.keys(structure)[0]
+      const firstCategory = Object.keys(structure)[0] as keyof typeof structure
       setCategory(firstCategory)
-      const items = structure[firstCategory as keyof typeof structure]
+      const items = structure[firstCategory]
       setItem(items[0])
       setAmount('')
       setMonth(new Date().getMonth() + 1)
@@ -120,9 +120,10 @@ export default function ExpenseModal({ isOpen, onClose, onSave, expense, default
                 const newType = e.target.value as typeof type
                 setType(newType)
                 const structure = EXPENSE_STRUCTURE[newType]
-                const firstCategory = Object.keys(structure)[0]
+                const firstCategory = Object.keys(structure)[0] as keyof typeof structure
                 setCategory(firstCategory)
-                setItem(structure[firstCategory][0])
+                const items = structure[firstCategory]
+                setItem(items[0])
               }}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
               required
@@ -141,10 +142,13 @@ export default function ExpenseModal({ isOpen, onClose, onSave, expense, default
             <select
               value={category}
               onChange={(e) => {
-                setCategory(e.target.value)
+                const newCategory = e.target.value
+                setCategory(newCategory)
                 const structure = EXPENSE_STRUCTURE[type]
-                const items = structure[e.target.value as keyof typeof structure]
-                setItem(items[0])
+                const items = structure[newCategory as keyof typeof structure]
+                if (items && items.length > 0) {
+                  setItem(items[0])
+                }
               }}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
               required

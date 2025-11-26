@@ -1,10 +1,10 @@
 'use client'
 
-import { User, LogOut, Settings } from 'lucide-react'
+import { User, LogOut, Settings, Calendar, DollarSign } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import DateSelector from './DateSelector'
 import { signOut } from '@/lib/auth'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 
 interface HeaderProps {
   userEmail?: string
@@ -14,6 +14,7 @@ interface HeaderProps {
 
 export default function Header({ userEmail, selectedDate, onDateChange }: HeaderProps) {
   const router = useRouter()
+  const pathname = usePathname()
 
   const handleSignOut = async () => {
     try {
@@ -30,7 +31,27 @@ export default function Header({ userEmail, selectedDate, onDateChange }: Header
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-6">
           <h1 className="text-2xl font-semibold text-gray-900">MHUB</h1>
-          <DateSelector date={selectedDate} onDateChange={onDateChange} />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/')}
+              className={pathname === '/' ? 'bg-gray-100' : ''}
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              Agenda
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/financial')}
+              className={pathname === '/financial' ? 'bg-gray-100' : ''}
+            >
+              <DollarSign className="w-4 h-4 mr-2" />
+              Financeiro
+            </Button>
+          </div>
+          {pathname === '/' && <DateSelector date={selectedDate} onDateChange={onDateChange} />}
         </div>
         
         <div className="flex items-center gap-4">

@@ -18,6 +18,25 @@ interface TimelineProps {
 export default function Timeline({ events, onAddEvent, onEditEvent, onDeleteEvent }: TimelineProps) {
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
+  // Agrupa eventos que começam no mesmo horário para distribuir horizontalmente
+  const groupEventsByTimeSlot = (eventsForHour: Array<{ event: Event; position: ReturnType<typeof getEventPosition> }>) => {
+    const groups: Map<string, Array<{ event: Event; position: ReturnType<typeof getEventPosition> }>> = new Map()
+    
+    eventsForHour.forEach(({ event, position }) => {
+      if (!position) return
+      
+      const start = parseISO(event.start_time)
+      const timeKey = `${start.getHours()}:${String(start.getMinutes()).padStart(2, '0')}`
+      
+      if (!groups.has(timeKey)) {
+        groups.set(timeKey, [])
+      }
+      groups.get(timeKey)!.push({ event, position })
+    })
+    
+    return groups
+  }
+
   const getEventPosition = (event: Event, hour: number): {
     top: string
     height: string
@@ -95,129 +114,211 @@ export default function Timeline({ events, onAddEvent, onEditEvent, onDeleteEven
                 </div>
                 <div className="flex-1 relative py-1">
                   {/* Events positioned absolutely */}
-                  {events
-                    .map((event) => {
-                      const position = getEventPosition(event, hour)
-                      if (!position) return null
+                  {(() => {
+                    // Mapeia eventos com suas posições
+                    const eventsWithPositions = events
+                      .map((event) => {
+                        const position = getEventPosition(event, hour)
+                        return position ? { event, position } : null
+                      })
+                      .filter((item): item is { event: Event; position: NonNullable<ReturnType<typeof getEventPosition>> } => item !== null)
+
+                    // Agrupa eventos por horário
+                    const groupedEvents = groupEventsByTimeSlot(eventsWithPositions)
+                    
+                    return Array.from(groupedEvents.entries()).flatMap(([timeKey, eventGroup]) => {
+                      const groupSize = eventGroup.length
+                      const isMultiple = groupSize > 1
                       
-                      // Evento sem end_time ou com end_time igual a start_time - mostra como ponto
-                      const isSingleTimeEvent = !event.end_time || event.end_time === event.start_time
-                      
-                      if (isSingleTimeEvent) {
-                        return (
-                          <div
-                            key={`${event.id}-${hour}`}
-                            className="absolute left-0 group"
-                            style={{
-                              top: position.top,
-                            }}
-                          >
-                            <div className="w-3 h-3 bg-primary rounded-full border-2 border-white shadow-sm cursor-pointer"></div>
-                            <div className="absolute left-4 top-0 bg-white border border-gray-200 rounded-lg shadow-xl p-3 min-w-[240px] opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none group-hover:pointer-events-auto">
-                              <div className="font-medium text-gray-900 text-sm mb-1">
-                                {event.title}
-                              </div>
-                              <div className="text-xs text-gray-600 mb-2">
-                                {format(parseISO(event.start_time), 'HH:mm')}
-                              </div>
-                              {event.description && (
-                                <div className="text-xs text-gray-500 mb-3">
-                                  {event.description}
-                                </div>
-                              )}
-                              <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    onEditEvent(event)
-                                  }}
-                                  onMouseEnter={(e) => e.stopPropagation()}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 hover:text-primary hover:bg-gray-100 rounded transition-all"
-                                  aria-label="Editar evento"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                  Editar
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    onDeleteEvent(event.id)
-                                  }}
-                                  onMouseEnter={(e) => e.stopPropagation()}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 hover:text-red-600 hover:bg-gray-100 rounded transition-all"
-                                  aria-label="Deletar evento"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  Deletar
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      }
-                      
-                      // Evento com end_time (durações)
-                      return (
-                        <div
-                          key={`${event.id}-${hour}`}
-                          className="absolute left-0 right-2 bg-primary/10 border-l-4 border-primary rounded p-2 text-sm group hover:bg-primary/15 transition-colors relative"
-                          style={{
-                            top: position.top,
-                            height: position.height,
-                            minHeight: '20px',
-                          }}
-                        >
-                          {position.isStart && (
-                            <>
-                              {/* Botões sempre visíveis no canto superior direito */}
-                              <div className="absolute top-1 right-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    e.preventDefault()
-                                    onEditEvent(event)
-                                  }}
-                                  className="p-1.5 bg-white/90 hover:bg-white text-gray-600 hover:text-primary rounded shadow-sm transition-all"
-                                  aria-label="Editar evento"
-                                  title="Editar"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    e.preventDefault()
-                                    onDeleteEvent(event.id)
-                                  }}
-                                  className="p-1.5 bg-white/90 hover:bg-white text-gray-600 hover:text-red-600 rounded shadow-sm transition-all"
-                                  aria-label="Deletar evento"
-                                  title="Deletar"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                              
-                              {/* Conteúdo do evento */}
-                              <div className="pr-12">
-                                <div className="font-medium text-gray-900">
+                      return eventGroup.map(({ event, position }, index) => {
+                        // position já está garantido como não-null pelo filter acima
+                        if (!position) return null
+                        
+                        // Calcula largura e posição horizontal para eventos no mesmo horário
+                        const widthPercent = isMultiple ? 100 / groupSize : 100
+                        const leftPercent = isMultiple ? (index * widthPercent) : 0
+                        const margin = isMultiple ? 1 : 0 // Pequena margem entre eventos lado a lado
+                        
+                        // Evento sem end_time ou com end_time igual a start_time - mostra como ponto/nó compacto
+                        const isSingleTimeEvent = !event.end_time || event.end_time === event.start_time
+                        
+                        if (isSingleTimeEvent) {
+                          return (
+                            <div
+                              key={`${event.id}-${hour}`}
+                              className="absolute group cursor-pointer"
+                              style={{
+                                top: position.top,
+                                left: `${leftPercent}%`,
+                                width: `calc(${widthPercent}% - ${margin * 2}px)`,
+                                marginLeft: index > 0 ? `${margin}px` : '0',
+                                marginRight: index < groupSize - 1 ? `${margin}px` : '0',
+                              }}
+                              onClick={() => onEditEvent(event)}
+                            >
+                              {/* Nó compacto */}
+                              <div className="bg-primary/10 border-l-4 border-primary rounded px-2 py-1.5 hover:bg-primary/20 transition-colors">
+                                <div className="font-medium text-gray-900 text-xs truncate">
                                   {event.title}
                                 </div>
-                                <div className="text-xs text-gray-600 mt-1">
+                                <div className="text-xs text-gray-600">
+                                  {format(parseISO(event.start_time), 'HH:mm')}
+                                </div>
+                              </div>
+                              
+                              {/* Tooltip com detalhes completos */}
+                              <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl p-3 min-w-[280px] opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none group-hover:pointer-events-auto">
+                                <div className="font-semibold text-gray-900 text-sm mb-1">
+                                  {event.title}
+                                </div>
+                                <div className="text-xs text-gray-600 mb-2">
                                   {format(parseISO(event.start_time), 'HH:mm')}
                                   {event.end_time && event.end_time !== event.start_time && ` - ${format(parseISO(event.end_time), 'HH:mm')}`}
                                 </div>
                                 {event.description && (
-                                  <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                  <div className="text-xs text-gray-500 mb-3 whitespace-pre-wrap">
                                     {event.description}
                                   </div>
                                 )}
+                                <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      onEditEvent(event)
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 hover:text-primary hover:bg-gray-100 rounded transition-all"
+                                    aria-label="Editar evento"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                    Editar
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      onDeleteEvent(event.id)
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 hover:text-red-600 hover:bg-gray-100 rounded transition-all"
+                                    aria-label="Deletar evento"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    Deletar
+                                  </button>
+                                </div>
                               </div>
-                            </>
-                          )}
-                        </div>
-                      )
+                            </div>
+                          )
+                        }
+                        
+                        // Evento com end_time (durações) - também compacto quando múltiplos
+                        return (
+                          <div
+                            key={`${event.id}-${hour}`}
+                            className="absolute group cursor-pointer"
+                            style={{
+                              top: position.top,
+                              height: position.height,
+                              left: `${leftPercent}%`,
+                              width: `calc(${widthPercent}% - ${margin * 2}px)`,
+                              marginLeft: index > 0 ? `${margin}px` : '0',
+                              marginRight: index < groupSize - 1 ? `${margin}px` : '0',
+                              minHeight: '20px',
+                            }}
+                            onClick={() => onEditEvent(event)}
+                          >
+                            {position.isStart && (
+                              <>
+                                {/* Nó compacto quando múltiplos eventos */}
+                                <div className={`bg-primary/10 border-l-4 border-primary rounded p-2 hover:bg-primary/15 transition-colors ${isMultiple ? 'h-full' : ''}`}>
+                                  <div className="font-medium text-gray-900 text-xs truncate">
+                                    {event.title}
+                                  </div>
+                                  <div className="text-xs text-gray-600 mt-0.5">
+                                    {format(parseISO(event.start_time), 'HH:mm')}
+                                    {event.end_time && event.end_time !== event.start_time && ` - ${format(parseISO(event.end_time), 'HH:mm')}`}
+                                  </div>
+                                  {!isMultiple && event.description && (
+                                    <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                      {event.description}
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Tooltip com detalhes completos (sempre visível no hover) */}
+                                <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl p-3 min-w-[280px] opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none group-hover:pointer-events-auto">
+                                  <div className="font-semibold text-gray-900 text-sm mb-1">
+                                    {event.title}
+                                  </div>
+                                  <div className="text-xs text-gray-600 mb-2">
+                                    {format(parseISO(event.start_time), 'HH:mm')}
+                                    {event.end_time && event.end_time !== event.start_time && ` - ${format(parseISO(event.end_time), 'HH:mm')}`}
+                                  </div>
+                                  {event.description && (
+                                    <div className="text-xs text-gray-500 mb-3 whitespace-pre-wrap">
+                                      {event.description}
+                                    </div>
+                                  )}
+                                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        onEditEvent(event)
+                                      }}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 hover:text-primary hover:bg-gray-100 rounded transition-all"
+                                      aria-label="Editar evento"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                      Editar
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        onDeleteEvent(event.id)
+                                      }}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 hover:text-red-600 hover:bg-gray-100 rounded transition-all"
+                                      aria-label="Deletar evento"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      Deletar
+                                    </button>
+                                  </div>
+                                </div>
+                                
+                                {/* Botões de ação no canto superior direito (apenas quando não múltiplos) */}
+                                {!isMultiple && (
+                                  <div className="absolute top-1 right-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        e.preventDefault()
+                                        onEditEvent(event)
+                                      }}
+                                      className="p-1.5 bg-white/90 hover:bg-white text-gray-600 hover:text-primary rounded shadow-sm transition-all"
+                                      aria-label="Editar evento"
+                                      title="Editar"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        e.preventDefault()
+                                        onDeleteEvent(event.id)
+                                      }}
+                                      className="p-1.5 bg-white/90 hover:bg-white text-gray-600 hover:text-red-600 rounded shadow-sm transition-all"
+                                      aria-label="Deletar evento"
+                                      title="Deletar"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )
+                      })
                     })
-                    .filter(Boolean)}
+                  })()}
                 </div>
               </div>
             ))}

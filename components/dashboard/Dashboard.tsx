@@ -40,6 +40,7 @@ export default function Dashboard({ user }: DashboardProps) {
   const [repeatedEvents, setRepeatedEvents] = useState<Event[]>([])
   const [isDeleting, setIsDeleting] = useState(false)
   const [activeNotifications, setActiveNotifications] = useState<Event[]>([])
+  const [editingEventRepeatDays, setEditingEventRepeatDays] = useState<number[]>([])
 
   // Handler para novas notificações
   const handleNewNotification = (event: Event) => {
@@ -162,17 +163,77 @@ export default function Dashboard({ user }: DashboardProps) {
     startTime: string
     endTime: string
     description: string
+    repeatDays: number[]
   }) => {
     try {
-      const updatedEvent = await updateEvent(id, {
-        title: data.title,
-        start_time: data.startTime,
-        end_time: data.endTime,
-        description: data.description || null,
-      })
-      setEvents(events.map((e) => e.id === id ? updatedEvent : e).sort((a, b) => 
+      const eventToEdit = events.find((e) => e.id === id)
+      if (!eventToEdit) return
+
+      // Se não há dias de repetição selecionados, atualiza apenas o evento atual
+      if (data.repeatDays.length === 0) {
+        const updatedEvent = await updateEvent(id, {
+          title: data.title,
+          start_time: data.startTime,
+          end_time: data.endTime,
+          description: data.description || null,
+        })
+        setEvents(events.map((e) => e.id === id ? updatedEvent : e).sort((a, b) => 
+          a.start_time.localeCompare(b.start_time)
+        ))
+        await loadData()
+        return
+      }
+
+      // Se há dias de repetição, precisa atualizar ou criar eventos repetidos
+      // Primeiro, busca eventos repetidos existentes
+      const repeatedEvents = await findRepeatedEvents(user.id, eventToEdit)
+      
+      // Deleta todos os eventos repetidos antigos
+      if (repeatedEvents.length > 0) {
+        const idsToDelete = repeatedEvents.map((e) => e.id)
+        await deleteMultipleEvents(idsToDelete)
+      }
+
+      // Cria novos eventos com os dias de repetição atualizados
+      const baseDate = new Date(data.startTime)
+      const baseHour = baseDate.getHours()
+      const baseMinute = baseDate.getMinutes()
+      
+      const baseEndDate = new Date(data.endTime)
+      const baseEndHour = baseEndDate.getHours()
+      const baseEndMinute = baseEndDate.getMinutes()
+
+      const today = new Date(selectedDate)
+      today.setHours(0, 0, 0, 0)
+      
+      const newEvents: Event[] = []
+      for (let i = 0; i < 30; i++) {
+        const checkDate = new Date(today)
+        checkDate.setDate(today.getDate() + i)
+        const dayOfWeek = checkDate.getDay()
+        
+        if (data.repeatDays.includes(dayOfWeek)) {
+          const eventStartDate = new Date(checkDate)
+          eventStartDate.setHours(baseHour, baseMinute, 0, 0)
+          
+          const eventEndDate = new Date(checkDate)
+          eventEndDate.setHours(baseEndHour, baseEndMinute, 0, 0)
+          
+          const event = await createEvent({
+            user_id: user.id,
+            title: data.title,
+            start_time: eventStartDate.toISOString(),
+            end_time: eventEndDate.toISOString(),
+            description: data.description || null,
+          })
+          newEvents.push(event)
+        }
+      }
+      
+      setEvents([...events.filter((e) => !repeatedEvents.some((re) => re.id === e.id)), ...newEvents].sort((a, b) => 
         a.start_time.localeCompare(b.start_time)
       ))
+      await loadData()
     } catch (error) {
       console.error('Error updating event:', error)
       throw error
@@ -342,9 +403,26 @@ export default function Dashboard({ user }: DashboardProps) {
           <Timeline
             events={events}
             onAddEvent={() => setIsEventModalOpen(true)}
-            onEditEvent={(event) => {
+            onEditEvent={async (event) => {
               setEditingEvent(event)
               setIsEditEventModalOpen(true)
+              // Busca dias de repetição do evento
+              try {
+                const repeated = await findRepeatedEvents(user.id, event)
+                if (repeated.length > 1) {
+                  // Extrai os dias da semana dos eventos repetidos
+                  const days = new Set<number>()
+                  repeated.forEach((e) => {
+                    const date = new Date(e.start_time)
+                    days.add(date.getDay())
+                  })
+                  setEditingEventRepeatDays(Array.from(days))
+                } else {
+                  setEditingEventRepeatDays([])
+                }
+              } catch {
+                setEditingEventRepeatDays([])
+              }
             }}
             onDeleteEvent={handleDeleteEvent}
           />
@@ -378,9 +456,11 @@ export default function Dashboard({ user }: DashboardProps) {
         onClose={() => {
           setIsEditEventModalOpen(false)
           setEditingEvent(null)
+          setEditingEventRepeatDays([])
         }}
         onSave={handleEditEvent}
         event={editingEvent}
+        currentRepeatDays={editingEventRepeatDays}
       />
 
       <AddTaskModal

@@ -10,6 +10,16 @@ import { format, parseISO } from 'date-fns'
 
 type Event = Database['public']['Tables']['events']['Row']
 
+const DAYS_OF_WEEK = [
+  { value: 0, label: 'Dom' },
+  { value: 1, label: 'Seg' },
+  { value: 2, label: 'Ter' },
+  { value: 3, label: 'Qua' },
+  { value: 4, label: 'Qui' },
+  { value: 5, label: 'Sex' },
+  { value: 6, label: 'Sáb' },
+]
+
 interface EditEventModalProps {
   isOpen: boolean
   onClose: () => void
@@ -18,8 +28,10 @@ interface EditEventModalProps {
     startTime: string
     endTime: string
     description: string
+    repeatDays: number[]
   }) => Promise<void>
   event: Event | null
+  currentRepeatDays?: number[] // Dias que o evento está repetindo atualmente
 }
 
 export default function EditEventModal({
@@ -27,11 +39,13 @@ export default function EditEventModal({
   onClose,
   onSave,
   event,
+  currentRepeatDays = [],
 }: EditEventModalProps) {
   const [title, setTitle] = useState('')
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
   const [description, setDescription] = useState('')
+  const [repeatDays, setRepeatDays] = useState<number[]>([])
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
@@ -47,8 +61,23 @@ export default function EditEventModal({
         setEndTime(format(start, 'HH:mm'))
       }
       setDescription(event.description || '')
+      setRepeatDays(currentRepeatDays)
     }
-  }, [event])
+  }, [event, currentRepeatDays])
+
+  const toggleDay = (day: number) => {
+    setRepeatDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    )
+  }
+
+  const selectAllDays = () => {
+    setRepeatDays([0, 1, 2, 3, 4, 5, 6])
+  }
+
+  const clearDays = () => {
+    setRepeatDays([])
+  }
 
   if (!isOpen || !event) return null
 
@@ -67,6 +96,7 @@ export default function EditEventModal({
         startTime: startDateTime.toISOString(),
         endTime: endDateTime.toISOString(),
         description,
+        repeatDays,
       })
 
       onClose()
@@ -79,7 +109,7 @@ export default function EditEventModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-md p-6 m-4">
+      <Card className="w-full max-w-md p-6 m-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Editar Compromisso</h3>
           <button
@@ -139,6 +169,51 @@ export default function EditEventModal({
               rows={3}
               placeholder="Adicione detalhes sobre o compromisso..."
             />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Repetir em dias da semana
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={selectAllDays}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={clearDays}
+                  className="text-xs text-gray-500 hover:underline"
+                >
+                  Limpar
+                </button>
+              </div>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {DAYS_OF_WEEK.map((day) => (
+                <button
+                  key={day.value}
+                  type="button"
+                  onClick={() => toggleDay(day.value)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    repeatDays.includes(day.value)
+                      ? 'bg-primary text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {day.label}
+                </button>
+              ))}
+            </div>
+            {repeatDays.length === 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                Se nenhum dia for selecionado, o evento não será repetido
+              </p>
+            )}
           </div>
 
           <div className="flex gap-3 justify-end pt-4">

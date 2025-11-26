@@ -89,6 +89,96 @@ export type Database = {
           notification_minutes_before?: number
         }
       }
+      revenues: {
+        Row: {
+          id: string
+          user_id: string
+          category: string
+          amount: number
+          month: number
+          year: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          category: string
+          amount: number
+          month: number
+          year: number
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          category?: string
+          amount?: number
+          month?: number
+          year?: number
+        }
+      }
+      investments: {
+        Row: {
+          id: string
+          user_id: string
+          category: string
+          amount: number
+          month: number
+          year: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          category: string
+          amount: number
+          month: number
+          year: number
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          category?: string
+          amount?: number
+          month?: number
+          year?: number
+        }
+      }
+      expenses: {
+        Row: {
+          id: string
+          user_id: string
+          type: string
+          category: string
+          item: string
+          amount: number
+          month: number
+          year: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: string
+          category: string
+          item: string
+          amount: number
+          month: number
+          year: number
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: string
+          category?: string
+          item?: string
+          amount?: number
+          month?: number
+          year?: number
+        }
+      }
     }
   }
 }

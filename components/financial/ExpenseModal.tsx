@@ -95,7 +95,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, expense, default
   }
 
   const availableCategories = Object.keys(EXPENSE_STRUCTURE[type])
-  const availableItems = category ? (EXPENSE_STRUCTURE[type][category as keyof typeof EXPENSE_STRUCTURE[typeof type]] || []) : []
+  const availableItems: string[] = category ? (EXPENSE_STRUCTURE[type][category as keyof typeof EXPENSE_STRUCTURE[typeof type]] as string[] || []) : []
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -145,7 +145,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, expense, default
                 const newCategory = e.target.value
                 setCategory(newCategory)
                 const structure = EXPENSE_STRUCTURE[type]
-                const items = structure[newCategory as keyof typeof structure]
+                const items = structure[newCategory as keyof typeof structure] as string[]
                 if (items && items.length > 0) {
                   setItem(items[0])
                 }

@@ -1,24 +1,40 @@
-import { HTMLAttributes, forwardRef } from 'react'
+'use client'
+
+import { HTMLMotionProps, motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
-export interface CardProps extends HTMLAttributes<HTMLDivElement> {}
+interface CardProps extends HTMLMotionProps<"div"> {
+  variant?: 'default' | 'glass' | 'flat'
+  noHover?: boolean
+}
 
-const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        className={cn(
-          'bg-white rounded-lg border border-gray-200 shadow-sm',
-          className
-        )}
-        {...props}
-      />
-    )
+export default function Card({
+  className,
+  variant = 'default',
+  noHover = false,
+  children,
+  ...props
+}: CardProps) {
+  const variants = {
+    default: "bg-white border border-gray-100 shadow-sm",
+    glass: "bg-white/70 backdrop-blur-lg border border-white/20 shadow-glass",
+    flat: "bg-gray-50 border border-transparent",
   }
-)
 
-Card.displayName = 'Card'
-
-export default Card
-
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={!noHover ? { y: -5, transition: { duration: 0.2 } } : undefined}
+      className={cn(
+        "rounded-2xl p-6 transition-all duration-300",
+        variants[variant],
+        !noHover && "hover:shadow-lg hover:shadow-primary/5",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </motion.div>
+  )
+}

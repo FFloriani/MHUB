@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   description: 'Seu organizador pessoal híbrido',
 }
 
+import AuthProvider from '@/components/providers/AuthProvider'
+import MainLayout from '@/components/layout/MainLayout'
+
 export default function RootLayout({
   children,
 }: {
@@ -16,7 +19,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <AuthProvider>
+          <MainLayout>
+            {children}
+          </MainLayout>
+        </AuthProvider>
+      </body>
     </html>
   )
 }

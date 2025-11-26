@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Edit2, Trash2 } from 'lucide-react'
+import { Plus, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import { createInvestment, updateInvestment, deleteInvestment } from '@/lib/data/financial'
@@ -31,6 +31,9 @@ interface InvestmentSectionProps {
 export default function InvestmentSection({ investments, year, userId, onUpdate }: InvestmentSectionProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null)
+
+  // Mobile state
+  const [mobileMonth, setMobileMonth] = useState(new Date().getMonth() + 1)
 
   const getInvestmentForMonth = (category: string, month: number) => {
     return investments.find(i => i.category === category && i.month === month)
@@ -77,9 +80,80 @@ export default function InvestmentSection({ investments, year, userId, onUpdate 
     }
   }
 
+  const renderMobileView = () => {
+    const total = calculateTotalForMonth(mobileMonth)
+
+    return (
+      <div className="space-y-6">
+        {/* Month Selector */}
+        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+          <button
+            onClick={() => setMobileMonth(m => m === 1 ? 12 : m - 1)}
+            className="p-2 hover:bg-white rounded-full transition-colors"
+          >
+            <ChevronLeft size={20} className="text-gray-600" />
+          </button>
+          <span className="font-semibold text-gray-900">{MONTHS[mobileMonth - 1]}</span>
+          <button
+            onClick={() => setMobileMonth(m => m === 12 ? 1 : m + 1)}
+            className="p-2 hover:bg-white rounded-full transition-colors"
+          >
+            <ChevronRight size={20} className="text-gray-600" />
+          </button>
+        </div>
+
+        {/* Total Header */}
+        <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+          <h4 className="font-semibold text-gray-900">Total Investimentos</h4>
+          <span className="text-sm font-bold text-blue-600">
+            R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </span>
+        </div>
+
+        {/* List */}
+        <div className="space-y-2">
+          {INVESTMENT_CATEGORIES.map((category) => {
+            const investment = getInvestmentForMonth(category, mobileMonth)
+            return (
+              <div key={category} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <span className="text-sm text-gray-700">{category}</span>
+                {investment ? (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-blue-600">
+                      R$ {Number(investment.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setEditingInvestment(investment)
+                        setIsModalOpen(true)
+                      }}
+                      className="text-gray-400 hover:text-blue-600"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setEditingInvestment(null)
+                      setIsModalOpen(true)
+                    }}
+                    className="text-xs text-blue-600 font-medium hover:underline"
+                  >
+                    Adicionar
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Investimentos</h3>
         <Button
           variant="primary"
@@ -90,11 +164,13 @@ export default function InvestmentSection({ investments, year, userId, onUpdate 
           }}
         >
           <Plus className="w-4 h-4 mr-2" />
-          Adicionar Investimento
+          <span className="hidden sm:inline">Adicionar Investimento</span>
+          <span className="sm:hidden">Adicionar</span>
         </Button>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Desktop View */}
+      <div className="hidden lg:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200">
@@ -166,21 +242,13 @@ export default function InvestmentSection({ investments, year, userId, onUpdate 
                 )
               })}
             </tr>
-            <tr className="border-t border-gray-200 text-xs text-gray-600">
-              <td className="py-2 px-2">% sobre Receita</td>
-              {MONTHS.map((_, monthIndex) => {
-                const month = monthIndex + 1
-                const investmentTotal = calculateTotalForMonth(month)
-                // Este cálculo será feito no componente pai com acesso às receitas
-                return (
-                  <td key={monthIndex} className="py-2 px-2 text-right">
-                    -
-                  </td>
-                )
-              })}
-            </tr>
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile View */}
+      <div className="lg:hidden">
+        {renderMobileView()}
       </div>
 
       <InvestmentModal
@@ -196,4 +264,3 @@ export default function InvestmentSection({ investments, year, userId, onUpdate 
     </Card>
   )
 }
-

@@ -2,6 +2,9 @@
 
 import Card from '@/components/ui/Card'
 import type { Revenue, Investment, Expense } from '@/lib/data/financial'
+import { cn } from '@/lib/utils'
+import { useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -16,190 +19,137 @@ interface FinancialSummaryProps {
 }
 
 export default function FinancialSummary({ revenues, investments, expenses, year }: FinancialSummaryProps) {
+  const [expandedMonth, setExpandedMonth] = useState<number | null>(new Date().getMonth() + 1)
+
   const calculateTotalForMonth = (month: number, data: Array<{ month: number; amount: number }>) => {
     return data
       .filter(item => item.month === month)
       .reduce((sum, item) => sum + Number(item.amount), 0)
   }
 
-  const calculateRevenueTotal = (month: number) => {
-    return calculateTotalForMonth(month, revenues)
-  }
+  const calculateRevenueTotal = (month: number) => calculateTotalForMonth(month, revenues)
+  const calculateInvestmentTotal = (month: number) => calculateTotalForMonth(month, investments)
 
-  const calculateInvestmentTotal = (month: number) => {
-    return calculateTotalForMonth(month, investments)
-  }
-
-  const calculateExpenseTotal = (month: number, type: string) => {
+  const calculateExpenseTotal = (month: number, type?: string) => {
     return expenses
-      .filter(e => e.month === month && e.type === type)
-      .reduce((sum, e) => sum + Number(e.amount), 0)
-  }
-
-  const calculateTotalExpenses = (month: number) => {
-    return expenses
-      .filter(e => e.month === month)
+      .filter(e => e.month === month && (!type || e.type === type))
       .reduce((sum, e) => sum + Number(e.amount), 0)
   }
 
   const calculateBalance = (month: number) => {
     const revenue = calculateRevenueTotal(month)
     const investment = calculateInvestmentTotal(month)
-    const totalExpenses = calculateTotalExpenses(month)
+    const totalExpenses = calculateExpenseTotal(month)
     return revenue - investment - totalExpenses
   }
 
-  const calculatePercentage = (value: number, total: number) => {
-    if (total === 0) return 0
-    return ((value / total) * 100).toFixed(1)
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
   }
 
   return (
-    <Card className="p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumo Financeiro</h3>
-      
-      <div className="overflow-x-auto">
+    <Card className="p-0 overflow-hidden">
+      <div className="p-6 border-b border-gray-100">
+        <h3 className="text-lg font-semibold text-gray-900">Resumo Anual</h3>
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden lg:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left py-2 px-2 font-medium text-gray-700">Item</th>
-              {MONTHS.map((month, index) => (
-                <th key={index} className="text-right py-2 px-2 font-medium text-gray-700 min-w-[100px]">
-                  {month.substring(0, 3)}
-                </th>
-              ))}
+            <tr className="bg-gray-50/50">
+              <th className="text-left py-3 px-4 font-medium text-gray-500">Mês</th>
+              <th className="text-right py-3 px-4 font-medium text-gray-500">Receita</th>
+              <th className="text-right py-3 px-4 font-medium text-gray-500">Investimentos</th>
+              <th className="text-right py-3 px-4 font-medium text-gray-500">Despesas</th>
+              <th className="text-right py-3 px-4 font-medium text-gray-500">Saldo</th>
             </tr>
           </thead>
-          <tbody>
-            <tr className="border-b border-gray-200 font-semibold">
-              <td className="py-2 px-2 text-gray-900">Receita</td>
-              {MONTHS.map((_, index) => {
-                const month = index + 1
-                const total = calculateRevenueTotal(month)
-                return (
-                  <td key={index} className="py-2 px-2 text-right text-green-600">
-                    R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          <tbody className="divide-y divide-gray-100">
+            {MONTHS.map((monthName, index) => {
+              const month = index + 1
+              const revenue = calculateRevenueTotal(month)
+              const investment = calculateInvestmentTotal(month)
+              const expense = calculateExpenseTotal(month)
+              const balance = calculateBalance(month)
+
+              return (
+                <tr key={month} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="py-3 px-4 font-medium text-gray-900">{monthName}</td>
+                  <td className="py-3 px-4 text-right text-green-600 font-medium">{formatCurrency(revenue)}</td>
+                  <td className="py-3 px-4 text-right text-blue-600">{formatCurrency(investment)}</td>
+                  <td className="py-3 px-4 text-right text-red-600">{formatCurrency(expense)}</td>
+                  <td className={cn("py-3 px-4 text-right font-bold", balance >= 0 ? "text-green-600" : "text-red-600")}>
+                    {formatCurrency(balance)}
                   </td>
-                )
-              })}
-            </tr>
-            
-            <tr className="border-b border-gray-200 font-semibold">
-              <td className="py-2 px-2 text-gray-900">Investimentos</td>
-              {MONTHS.map((_, index) => {
-                const month = index + 1
-                const total = calculateInvestmentTotal(month)
-                const revenue = calculateRevenueTotal(month)
-                const percentage = calculatePercentage(total, revenue)
-                return (
-                  <td key={index} className="py-2 px-2 text-right">
-                    <div className="text-blue-600">
-                      R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {percentage}%
-                    </div>
-                  </td>
-                )
-              })}
-            </tr>
-            
-            <tr className="border-b border-gray-200">
-              <td className="py-2 px-2 text-gray-700 pl-4">Despesas Fixas</td>
-              {MONTHS.map((_, index) => {
-                const month = index + 1
-                const total = calculateExpenseTotal(month, 'fixa')
-                const revenue = calculateRevenueTotal(month)
-                const percentage = calculatePercentage(total, revenue)
-                return (
-                  <td key={index} className="py-2 px-2 text-right">
-                    <div className="text-gray-900">
-                      R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {percentage}%
-                    </div>
-                  </td>
-                )
-              })}
-            </tr>
-            
-            <tr className="border-b border-gray-200">
-              <td className="py-2 px-2 text-gray-700 pl-4">Despesas Variáveis</td>
-              {MONTHS.map((_, index) => {
-                const month = index + 1
-                const total = calculateExpenseTotal(month, 'variavel')
-                const revenue = calculateRevenueTotal(month)
-                const percentage = calculatePercentage(total, revenue)
-                return (
-                  <td key={index} className="py-2 px-2 text-right">
-                    <div className="text-gray-900">
-                      R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {percentage}%
-                    </div>
-                  </td>
-                )
-              })}
-            </tr>
-            
-            <tr className="border-b border-gray-200">
-              <td className="py-2 px-2 text-gray-700 pl-4">Despesas Extras</td>
-              {MONTHS.map((_, index) => {
-                const month = index + 1
-                const total = calculateExpenseTotal(month, 'extra')
-                const revenue = calculateRevenueTotal(month)
-                const percentage = calculatePercentage(total, revenue)
-                return (
-                  <td key={index} className="py-2 px-2 text-right">
-                    <div className="text-gray-900">
-                      R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {percentage}%
-                    </div>
-                  </td>
-                )
-              })}
-            </tr>
-            
-            <tr className="border-b border-gray-200">
-              <td className="py-2 px-2 text-gray-700 pl-4">Despesas Adicionais</td>
-              {MONTHS.map((_, index) => {
-                const month = index + 1
-                const total = calculateExpenseTotal(month, 'adicional')
-                const revenue = calculateRevenueTotal(month)
-                const percentage = calculatePercentage(total, revenue)
-                return (
-                  <td key={index} className="py-2 px-2 text-right">
-                    <div className="text-gray-900">
-                      R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {percentage}%
-                    </div>
-                  </td>
-                )
-              })}
-            </tr>
-            
-            <tr className="border-t-2 border-gray-300 font-semibold bg-gray-50">
-              <td className="py-2 px-2 text-gray-900">Saldo</td>
-              {MONTHS.map((_, index) => {
-                const month = index + 1
-                const balance = calculateBalance(month)
-                return (
-                  <td key={index} className={`py-2 px-2 text-right ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </td>
-                )
-              })}
-            </tr>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="lg:hidden divide-y divide-gray-100">
+        {MONTHS.map((monthName, index) => {
+          const month = index + 1
+          const isExpanded = expandedMonth === month
+          const revenue = calculateRevenueTotal(month)
+          const investment = calculateInvestmentTotal(month)
+          const expense = calculateExpenseTotal(month)
+          const balance = calculateBalance(month)
+
+          return (
+            <div key={month} className="bg-white">
+              <button
+                onClick={() => setExpandedMonth(isExpanded ? null : month)}
+                className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex flex-col items-start">
+                  <span className="font-medium text-gray-900">{monthName}</span>
+                  <span className={cn("text-sm font-semibold", balance >= 0 ? "text-green-600" : "text-red-600")}>
+                    {formatCurrency(balance)}
+                  </span>
+                </div>
+                {isExpanded ? <ChevronUp size={20} className="text-gray-400" /> : <ChevronDown size={20} className="text-gray-400" />}
+              </button>
+
+              {isExpanded && (
+                <div className="px-4 pb-4 bg-gray-50/50 space-y-2 text-sm">
+                  <div className="flex justify-between pt-2">
+                    <span className="text-gray-600">Receita</span>
+                    <span className="text-green-600 font-medium">{formatCurrency(revenue)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Investimentos</span>
+                    <span className="text-blue-600">{formatCurrency(investment)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Despesas Totais</span>
+                    <span className="text-red-600">{formatCurrency(expense)}</span>
+                  </div>
+
+                  {/* Detailed Expenses Breakdown */}
+                  <div className="mt-3 pt-2 border-t border-gray-200 pl-2 space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">Fixas</span>
+                      <span className="text-gray-700">{formatCurrency(calculateExpenseTotal(month, 'fixa'))}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">Variáveis</span>
+                      <span className="text-gray-700">{formatCurrency(calculateExpenseTotal(month, 'variavel'))}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">Extras</span>
+                      <span className="text-gray-700">{formatCurrency(calculateExpenseTotal(month, 'extra'))}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </Card>
   )
 }
-

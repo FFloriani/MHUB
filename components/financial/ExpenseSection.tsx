@@ -1,12 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Edit2, Trash2 } from 'lucide-react'
+import { Plus, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import { createExpense, updateExpense, deleteExpense } from '@/lib/data/financial'
 import ExpenseModal from './ExpenseModal'
 import type { Expense } from '@/lib/data/financial'
+import { cn } from '@/lib/utils'
 
 const EXPENSE_STRUCTURE = {
   fixa: {
@@ -54,11 +55,14 @@ export default function ExpenseSection({ expenses, year, userId, onUpdate }: Exp
   const [selectedType, setSelectedType] = useState<'fixa' | 'variavel' | 'extra' | 'adicional'>('fixa')
   const [prefillData, setPrefillData] = useState<{ type: string; category: string; item: string } | null>(null)
 
+  // Mobile state
+  const [mobileMonth, setMobileMonth] = useState(new Date().getMonth() + 1)
+
   const getExpenseForMonth = (type: string, category: string, item: string, month: number) => {
-    return expenses.find(e => 
-      e.type === type && 
-      e.category === category && 
-      e.item === item && 
+    return expenses.find(e =>
+      e.type === type &&
+      e.category === category &&
+      e.item === item &&
       e.month === month
     )
   }
@@ -108,7 +112,7 @@ export default function ExpenseSection({ expenses, year, userId, onUpdate }: Exp
 
   const renderExpenseTable = (type: 'fixa' | 'variavel' | 'extra' | 'adicional', title: string) => {
     const structure = EXPENSE_STRUCTURE[type]
-    
+
     return (
       <div className="mb-8">
         <h4 className="text-md font-semibold text-gray-900 mb-3">{title}</h4>
@@ -201,9 +205,96 @@ export default function ExpenseSection({ expenses, year, userId, onUpdate }: Exp
     )
   }
 
+  const renderMobileView = () => {
+    return (
+      <div className="space-y-6">
+        {/* Month Selector */}
+        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+          <button
+            onClick={() => setMobileMonth(m => m === 1 ? 12 : m - 1)}
+            className="p-2 hover:bg-white rounded-full transition-colors"
+          >
+            <ChevronLeft size={20} className="text-gray-600" />
+          </button>
+          <span className="font-semibold text-gray-900">{MONTHS[mobileMonth - 1]}</span>
+          <button
+            onClick={() => setMobileMonth(m => m === 12 ? 1 : m + 1)}
+            className="p-2 hover:bg-white rounded-full transition-colors"
+          >
+            <ChevronRight size={20} className="text-gray-600" />
+          </button>
+        </div>
+
+        {/* Expense Lists by Type */}
+        {(['fixa', 'variavel', 'extra', 'adicional'] as const).map((type) => {
+          const title = type === 'fixa' ? 'Fixas' : type === 'variavel' ? 'Variáveis' : type === 'extra' ? 'Extras' : 'Adicionais'
+          const structure = EXPENSE_STRUCTURE[type]
+          const total = calculateTotalForMonth(type, mobileMonth)
+
+          return (
+            <div key={type} className="space-y-3">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <h4 className="font-semibold text-gray-900">{title}</h4>
+                <span className="text-sm font-bold text-gray-900">
+                  R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {Object.entries(structure).map(([category, items]) => (
+                  <div key={category} className="space-y-2">
+                    <h5 className="text-xs font-medium text-gray-500 uppercase tracking-wider">{category}</h5>
+                    <div className="grid gap-2">
+                      {items.map((item) => {
+                        const expense = getExpenseForMonth(type, category, item, mobileMonth)
+                        return (
+                          <div key={item} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <span className="text-sm text-gray-700">{item}</span>
+                            {expense ? (
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm font-medium text-gray-900">
+                                  R$ {Number(expense.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setEditingExpense(expense)
+                                    setIsModalOpen(true)
+                                  }}
+                                  className="text-gray-400 hover:text-blue-600"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setEditingExpense(null)
+                                  setSelectedType(type)
+                                  setPrefillData({ type, category, item })
+                                  setIsModalOpen(true)
+                                }}
+                                className="text-xs text-blue-600 font-medium hover:underline"
+                              >
+                                Adicionar
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Despesas</h3>
         <Button
           variant="primary"
@@ -215,14 +306,23 @@ export default function ExpenseSection({ expenses, year, userId, onUpdate }: Exp
           }}
         >
           <Plus className="w-4 h-4 mr-2" />
-          Adicionar Despesa
+          <span className="hidden sm:inline">Adicionar Despesa</span>
+          <span className="sm:hidden">Adicionar</span>
         </Button>
       </div>
 
-      {renderExpenseTable('fixa', 'Despesas Fixas')}
-      {renderExpenseTable('variavel', 'Despesas Variáveis')}
-      {renderExpenseTable('extra', 'Despesas Extras')}
-      {renderExpenseTable('adicional', 'Despesas Adicionais')}
+      {/* Desktop View */}
+      <div className="hidden lg:block">
+        {renderExpenseTable('fixa', 'Despesas Fixas')}
+        {renderExpenseTable('variavel', 'Despesas Variáveis')}
+        {renderExpenseTable('extra', 'Despesas Extras')}
+        {renderExpenseTable('adicional', 'Despesas Adicionais')}
+      </div>
+
+      {/* Mobile View */}
+      <div className="lg:hidden">
+        {renderMobileView()}
+      </div>
 
       <ExpenseModal
         isOpen={isModalOpen}
@@ -240,4 +340,3 @@ export default function ExpenseSection({ expenses, year, userId, onUpdate }: Exp
     </Card>
   )
 }
-

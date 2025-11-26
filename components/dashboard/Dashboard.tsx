@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { format } from 'date-fns'
 import type { User } from '@supabase/supabase-js'
-import Header from './Header'
+import DateSelector from './DateSelector'
+import PageTransition from '@/components/layout/PageTransition'
 import Timeline from './Timeline'
 import TaskList from './TaskList'
 import AddEventModal from './AddEventModal'
@@ -98,11 +99,11 @@ export default function Dashboard({ user }: DashboardProps) {
       const baseDate = new Date(data.startTime)
       const baseHour = baseDate.getHours()
       const baseMinute = baseDate.getMinutes()
-      
+
       const baseEndDate = new Date(data.endTime)
       const baseEndHour = baseEndDate.getHours()
       const baseEndMinute = baseEndDate.getMinutes()
-      
+
       // Se não há dias selecionados, cria apenas um evento
       if (data.repeatDays.length === 0) {
         const newEvent = await createEvent({
@@ -112,7 +113,7 @@ export default function Dashboard({ user }: DashboardProps) {
           end_time: data.endTime,
           description: data.description || null,
         })
-        setEvents([...events, newEvent].sort((a, b) => 
+        setEvents([...events, newEvent].sort((a, b) =>
           a.start_time.localeCompare(b.start_time)
         ))
         await loadData() // Recarrega para garantir que está atualizado
@@ -123,19 +124,19 @@ export default function Dashboard({ user }: DashboardProps) {
       const newEvents: Event[] = []
       const today = new Date(selectedDate)
       today.setHours(0, 0, 0, 0)
-      
+
       for (let i = 0; i < 30; i++) {
         const checkDate = new Date(today)
         checkDate.setDate(today.getDate() + i)
         const dayOfWeek = checkDate.getDay()
-        
+
         if (data.repeatDays.includes(dayOfWeek)) {
           const eventStartDate = new Date(checkDate)
           eventStartDate.setHours(baseHour, baseMinute, 0, 0)
-          
+
           const eventEndDate = new Date(checkDate)
           eventEndDate.setHours(baseEndHour, baseEndMinute, 0, 0)
-          
+
           const event = await createEvent({
             user_id: user.id,
             title: data.title,
@@ -146,8 +147,8 @@ export default function Dashboard({ user }: DashboardProps) {
           newEvents.push(event)
         }
       }
-      
-      setEvents([...events, ...newEvents].sort((a, b) => 
+
+      setEvents([...events, ...newEvents].sort((a, b) =>
         a.start_time.localeCompare(b.start_time)
       ))
       await loadData() // Recarrega para garantir que está atualizado
@@ -177,7 +178,7 @@ export default function Dashboard({ user }: DashboardProps) {
           end_time: data.endTime,
           description: data.description || null,
         })
-        setEvents(events.map((e) => e.id === id ? updatedEvent : e).sort((a, b) => 
+        setEvents(events.map((e) => e.id === id ? updatedEvent : e).sort((a, b) =>
           a.start_time.localeCompare(b.start_time)
         ))
         await loadData()
@@ -187,7 +188,7 @@ export default function Dashboard({ user }: DashboardProps) {
       // Se há dias de repetição, precisa atualizar ou criar eventos repetidos
       // Primeiro, busca eventos repetidos existentes
       const repeatedEvents = await findRepeatedEvents(user.id, eventToEdit)
-      
+
       // Deleta todos os eventos repetidos antigos
       if (repeatedEvents.length > 0) {
         const idsToDelete = repeatedEvents.map((e) => e.id)
@@ -198,27 +199,27 @@ export default function Dashboard({ user }: DashboardProps) {
       const baseDate = new Date(data.startTime)
       const baseHour = baseDate.getHours()
       const baseMinute = baseDate.getMinutes()
-      
+
       const baseEndDate = new Date(data.endTime)
       const baseEndHour = baseEndDate.getHours()
       const baseEndMinute = baseEndDate.getMinutes()
 
       const today = new Date(selectedDate)
       today.setHours(0, 0, 0, 0)
-      
+
       const newEvents: Event[] = []
       for (let i = 0; i < 30; i++) {
         const checkDate = new Date(today)
         checkDate.setDate(today.getDate() + i)
         const dayOfWeek = checkDate.getDay()
-        
+
         if (data.repeatDays.includes(dayOfWeek)) {
           const eventStartDate = new Date(checkDate)
           eventStartDate.setHours(baseHour, baseMinute, 0, 0)
-          
+
           const eventEndDate = new Date(checkDate)
           eventEndDate.setHours(baseEndHour, baseEndMinute, 0, 0)
-          
+
           const event = await createEvent({
             user_id: user.id,
             title: data.title,
@@ -229,8 +230,8 @@ export default function Dashboard({ user }: DashboardProps) {
           newEvents.push(event)
         }
       }
-      
-      setEvents([...events.filter((e) => !repeatedEvents.some((re) => re.id === e.id)), ...newEvents].sort((a, b) => 
+
+      setEvents([...events.filter((e) => !repeatedEvents.some((re) => re.id === e.id)), ...newEvents].sort((a, b) =>
         a.start_time.localeCompare(b.start_time)
       ))
       await loadData()
@@ -247,7 +248,7 @@ export default function Dashboard({ user }: DashboardProps) {
     try {
       // Busca eventos repetidos
       const repeated = await findRepeatedEvents(user.id, event)
-      
+
       // Se há mais de um evento repetido, mostra o modal de confirmação
       if (repeated.length > 1) {
         setEventToDelete(event)
@@ -255,7 +256,7 @@ export default function Dashboard({ user }: DashboardProps) {
         setIsDeleteConfirmModalOpen(true)
         return
       }
-      
+
       // Se é apenas um evento, deleta diretamente
       if (confirm('Tem certeza que deseja deletar este compromisso?')) {
         await deleteEvent(id)
@@ -280,7 +281,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
   const handleDeleteOneEvent = async () => {
     if (!eventToDelete) return
-    
+
     setIsDeleting(true)
     try {
       await deleteEvent(eventToDelete.id)
@@ -299,7 +300,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
   const handleDeleteAllRepeatedEvents = async () => {
     if (!eventToDelete || repeatedEvents.length === 0) return
-    
+
     setIsDeleting(true)
     try {
       const idsToDelete = repeatedEvents.map((e) => e.id)
@@ -336,7 +337,7 @@ export default function Dashboard({ user }: DashboardProps) {
   const handleToggleTask = async (id: string, isCompleted: boolean) => {
     try {
       await updateTask(id, { is_completed: isCompleted })
-      setTasks(tasks.map((task) => 
+      setTasks(tasks.map((task) =>
         task.id === id ? { ...task, is_completed: isCompleted } : task
       ))
     } catch (error) {
@@ -358,7 +359,7 @@ export default function Dashboard({ user }: DashboardProps) {
     if (!confirm('Tem certeza que deseja deletar esta tarefa?')) {
       return
     }
-    
+
     try {
       await deleteTask(id)
       setTasks(tasks.filter((t) => t.id !== id))
@@ -376,13 +377,21 @@ export default function Dashboard({ user }: DashboardProps) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <Header
-        userEmail={user.email}
-        selectedDate={selectedDate}
-        onDateChange={setSelectedDate}
-      />
-      
+    <div className="min-h-screen flex flex-col">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 p-8 pb-0">
+        <div className="space-y-1">
+          <h1 className="text-4xl font-extrabold tracking-tight">
+            <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary animate-gradient-x">
+              Bom dia, {user.email?.split('@')[0]}!
+            </span>
+          </h1>
+          <p className="text-gray-500 font-medium">Vamos fazer hoje um dia produtivo.</p>
+        </div>
+        <div className="bg-white/50 backdrop-blur-sm p-1 rounded-2xl border border-white/20 shadow-sm">
+          <DateSelector date={selectedDate} onDateChange={setSelectedDate} />
+        </div>
+      </div>
+
       {/* Notificações Toast */}
       {activeNotifications.length > 0 && (
         <div className="fixed top-20 right-6 z-50 space-y-3 max-w-md">
@@ -396,52 +405,54 @@ export default function Dashboard({ user }: DashboardProps) {
           ))}
         </div>
       )}
-      
-      <main className="flex-1 flex gap-6 p-6 overflow-hidden">
+
+      <PageTransition className="flex-1 flex flex-col lg:flex-row gap-8 p-8 overflow-hidden">
         {/* Coluna Esquerda - Agenda/Timeline */}
-        <div className="flex-1 bg-white rounded-lg border border-gray-200 p-6 shadow-sm overflow-hidden">
-          <Timeline
-            events={events}
-            onAddEvent={() => setIsEventModalOpen(true)}
-            onEditEvent={async (event) => {
-              setEditingEvent(event)
-              setIsEditEventModalOpen(true)
-              // Busca dias de repetição do evento
-              try {
-                const repeated = await findRepeatedEvents(user.id, event)
-                if (repeated.length > 1) {
-                  // Extrai os dias da semana dos eventos repetidos
-                  const days = new Set<number>()
-                  repeated.forEach((e) => {
-                    const date = new Date(e.start_time)
-                    days.add(date.getDay())
-                  })
-                  setEditingEventRepeatDays(Array.from(days))
-                } else {
+        <div className="flex-1 space-y-6">
+          <div className="bg-white/60 backdrop-blur-xl rounded-3xl border border-white/40 p-8 shadow-glass h-full">
+            <Timeline
+              events={events}
+              onAddEvent={() => setIsEventModalOpen(true)}
+              onEditEvent={async (event) => {
+                setEditingEvent(event)
+                setIsEditEventModalOpen(true)
+                try {
+                  const repeated = await findRepeatedEvents(user.id, event)
+                  if (repeated.length > 1) {
+                    const days = new Set<number>()
+                    repeated.forEach((e) => {
+                      const date = new Date(e.start_time)
+                      days.add(date.getDay())
+                    })
+                    setEditingEventRepeatDays(Array.from(days))
+                  } else {
+                    setEditingEventRepeatDays([])
+                  }
+                } catch {
                   setEditingEventRepeatDays([])
                 }
-              } catch {
-                setEditingEventRepeatDays([])
-              }
-            }}
-            onDeleteEvent={handleDeleteEvent}
-          />
+              }}
+              onDeleteEvent={handleDeleteEvent}
+            />
+          </div>
         </div>
 
         {/* Coluna Direita - Tasks/To-Do */}
-        <div className="w-96 bg-white rounded-lg border border-gray-200 p-6 shadow-sm overflow-hidden">
-          <TaskList
-            tasks={tasks}
-            onToggleTask={handleToggleTask}
-            onAddTask={() => setIsTaskModalOpen(true)}
-            onEditTask={(task) => {
-              setEditingTask(task)
-              setIsEditTaskModalOpen(true)
-            }}
-            onDeleteTask={handleDeleteTask}
-          />
+        <div className="w-full lg:w-[400px]">
+          <div className="bg-white/60 backdrop-blur-xl rounded-3xl border border-white/40 p-8 shadow-glass h-full sticky top-8">
+            <TaskList
+              tasks={tasks}
+              onToggleTask={handleToggleTask}
+              onAddTask={() => setIsTaskModalOpen(true)}
+              onEditTask={(task) => {
+                setEditingTask(task)
+                setIsEditTaskModalOpen(true)
+              }}
+              onDeleteTask={handleDeleteTask}
+            />
+          </div>
         </div>
-      </main>
+      </PageTransition>
 
       {/* Modais */}
       <AddEventModal

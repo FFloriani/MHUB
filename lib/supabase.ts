@@ -47,7 +47,7 @@ export type Database = {
           user_id: string
           title: string
           start_time: string
-          end_time: string
+          end_time: string | null
           description: string | null
         }
         Insert: {
@@ -55,7 +55,7 @@ export type Database = {
           user_id: string
           title: string
           start_time: string
-          end_time: string
+          end_time?: string | null
           description?: string | null
         }
         Update: {
@@ -63,8 +63,30 @@ export type Database = {
           user_id?: string
           title?: string
           start_time?: string
-          end_time?: string
+          end_time?: string | null
           description?: string | null
+        }
+      }
+      user_settings: {
+        Row: {
+          id: string
+          user_id: string
+          notifications_enabled: boolean
+          notification_minutes_before: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          notifications_enabled?: boolean
+          notification_minutes_before?: number
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          notifications_enabled?: boolean
+          notification_minutes_before?: number
         }
       }
     }

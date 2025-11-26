@@ -7,9 +7,14 @@ import Header from './Header'
 import Timeline from './Timeline'
 import TaskList from './TaskList'
 import AddEventModal from './AddEventModal'
+import EditEventModal from './EditEventModal'
 import AddTaskModal from './AddTaskModal'
-import { getEventsByDate, createEvent } from '@/lib/data/events'
-import { getTasksByDate, createTask, updateTask } from '@/lib/data/tasks'
+import EditTaskModal from './EditTaskModal'
+import DeleteEventConfirmModal from './DeleteEventConfirmModal'
+import NotificationToast from './NotificationToast'
+import { getEventsByDate, createEvent, updateEvent, deleteEvent, findRepeatedEvents, deleteMultipleEvents } from '@/lib/data/events'
+import { getTasksByDate, createTask, updateTask, deleteTask } from '@/lib/data/tasks'
+import { useEventNotifications, markEventAsConfirmed } from '@/hooks/useEventNotifications'
 import type { Database } from '@/lib/supabase'
 
 type Event = Database['public']['Tables']['events']['Row']
@@ -25,7 +30,41 @@ export default function Dashboard({ user }: DashboardProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isEventModalOpen, setIsEventModalOpen] = useState(false)
+  const [isEditEventModalOpen, setIsEditEventModalOpen] = useState(false)
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
+  const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false)
+  const [eventToDelete, setEventToDelete] = useState<Event | null>(null)
+  const [repeatedEvents, setRepeatedEvents] = useState<Event[]>([])
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [activeNotifications, setActiveNotifications] = useState<Event[]>([])
+
+  // Handler para novas notificações
+  const handleNewNotification = (event: Event) => {
+    setActiveNotifications((prev) => {
+      // Evita duplicatas
+      if (prev.some((e) => e.id === event.id)) {
+        return prev
+      }
+      return [...prev, event]
+    })
+  }
+
+  // Configurar notificações de eventos
+  useEventNotifications(user.id, handleNewNotification)
+
+  // Confirmar visualização de notificação
+  const handleConfirmNotification = (eventId: string) => {
+    markEventAsConfirmed(eventId)
+    setActiveNotifications((prev) => prev.filter((e) => e.id !== eventId))
+  }
+
+  // Fechar notificação sem confirmar
+  const handleDismissNotification = (eventId: string) => {
+    setActiveNotifications((prev) => prev.filter((e) => e.id !== eventId))
+  }
 
   useEffect(() => {
     loadData()
@@ -52,21 +91,168 @@ export default function Dashboard({ user }: DashboardProps) {
     startTime: string
     endTime: string
     description: string
+    repeatDays: number[]
   }) => {
     try {
-      const newEvent = await createEvent({
-        user_id: user.id,
+      const baseDate = new Date(data.startTime)
+      const baseHour = baseDate.getHours()
+      const baseMinute = baseDate.getMinutes()
+      
+      const baseEndDate = new Date(data.endTime)
+      const baseEndHour = baseEndDate.getHours()
+      const baseEndMinute = baseEndDate.getMinutes()
+      
+      // Se não há dias selecionados, cria apenas um evento
+      if (data.repeatDays.length === 0) {
+        const newEvent = await createEvent({
+          user_id: user.id,
+          title: data.title,
+          start_time: data.startTime,
+          end_time: data.endTime,
+          description: data.description || null,
+        })
+        setEvents([...events, newEvent].sort((a, b) => 
+          a.start_time.localeCompare(b.start_time)
+        ))
+        await loadData() // Recarrega para garantir que está atualizado
+        return
+      }
+
+      // Cria eventos repetidos para os próximos 30 dias nos dias selecionados
+      const newEvents: Event[] = []
+      const today = new Date(selectedDate)
+      today.setHours(0, 0, 0, 0)
+      
+      for (let i = 0; i < 30; i++) {
+        const checkDate = new Date(today)
+        checkDate.setDate(today.getDate() + i)
+        const dayOfWeek = checkDate.getDay()
+        
+        if (data.repeatDays.includes(dayOfWeek)) {
+          const eventStartDate = new Date(checkDate)
+          eventStartDate.setHours(baseHour, baseMinute, 0, 0)
+          
+          const eventEndDate = new Date(checkDate)
+          eventEndDate.setHours(baseEndHour, baseEndMinute, 0, 0)
+          
+          const event = await createEvent({
+            user_id: user.id,
+            title: data.title,
+            start_time: eventStartDate.toISOString(),
+            end_time: eventEndDate.toISOString(),
+            description: data.description || null,
+          })
+          newEvents.push(event)
+        }
+      }
+      
+      setEvents([...events, ...newEvents].sort((a, b) => 
+        a.start_time.localeCompare(b.start_time)
+      ))
+      await loadData() // Recarrega para garantir que está atualizado
+    } catch (error: any) {
+      console.error('Error creating event:', error)
+      alert(`Erro ao criar compromisso: ${error?.message || JSON.stringify(error)}`)
+      throw error
+    }
+  }
+
+  const handleEditEvent = async (id: string, data: {
+    title: string
+    startTime: string
+    endTime: string
+    description: string
+  }) => {
+    try {
+      const updatedEvent = await updateEvent(id, {
         title: data.title,
         start_time: data.startTime,
         end_time: data.endTime,
         description: data.description || null,
       })
-      setEvents([...events, newEvent].sort((a, b) => 
+      setEvents(events.map((e) => e.id === id ? updatedEvent : e).sort((a, b) => 
         a.start_time.localeCompare(b.start_time)
       ))
     } catch (error) {
-      console.error('Error creating event:', error)
+      console.error('Error updating event:', error)
       throw error
+    }
+  }
+
+  const handleDeleteEvent = async (id: string) => {
+    const event = events.find((e) => e.id === id)
+    if (!event) return
+
+    try {
+      // Busca eventos repetidos
+      const repeated = await findRepeatedEvents(user.id, event)
+      
+      // Se há mais de um evento repetido, mostra o modal de confirmação
+      if (repeated.length > 1) {
+        setEventToDelete(event)
+        setRepeatedEvents(repeated)
+        setIsDeleteConfirmModalOpen(true)
+        return
+      }
+      
+      // Se é apenas um evento, deleta diretamente
+      if (confirm('Tem certeza que deseja deletar este compromisso?')) {
+        await deleteEvent(id)
+        setEvents(events.filter((e) => e.id !== id))
+        await loadData()
+      }
+    } catch (error) {
+      console.error('Error checking repeated events:', error)
+      // Em caso de erro, tenta deletar normalmente
+      if (confirm('Tem certeza que deseja deletar este compromisso?')) {
+        try {
+          await deleteEvent(id)
+          setEvents(events.filter((e) => e.id !== id))
+          await loadData()
+        } catch (deleteError) {
+          console.error('Error deleting event:', deleteError)
+          alert('Erro ao deletar compromisso')
+        }
+      }
+    }
+  }
+
+  const handleDeleteOneEvent = async () => {
+    if (!eventToDelete) return
+    
+    setIsDeleting(true)
+    try {
+      await deleteEvent(eventToDelete.id)
+      setEvents(events.filter((e) => e.id !== eventToDelete.id))
+      await loadData()
+      setIsDeleteConfirmModalOpen(false)
+      setEventToDelete(null)
+      setRepeatedEvents([])
+    } catch (error) {
+      console.error('Error deleting event:', error)
+      alert('Erro ao deletar compromisso')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleDeleteAllRepeatedEvents = async () => {
+    if (!eventToDelete || repeatedEvents.length === 0) return
+    
+    setIsDeleting(true)
+    try {
+      const idsToDelete = repeatedEvents.map((e) => e.id)
+      await deleteMultipleEvents(idsToDelete)
+      setEvents(events.filter((e) => !idsToDelete.includes(e.id)))
+      await loadData()
+      setIsDeleteConfirmModalOpen(false)
+      setEventToDelete(null)
+      setRepeatedEvents([])
+    } catch (error) {
+      console.error('Error deleting multiple events:', error)
+      alert('Erro ao deletar compromissos')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -97,6 +283,29 @@ export default function Dashboard({ user }: DashboardProps) {
     }
   }
 
+  const handleEditTask = async (id: string, title: string) => {
+    try {
+      const updatedTask = await updateTask(id, { title })
+      setTasks(tasks.map((t) => t.id === id ? updatedTask : t))
+    } catch (error) {
+      console.error('Error updating task:', error)
+      throw error
+    }
+  }
+
+  const handleDeleteTask = async (id: string) => {
+    if (!confirm('Tem certeza que deseja deletar esta tarefa?')) {
+      return
+    }
+    
+    try {
+      await deleteTask(id)
+      setTasks(tasks.filter((t) => t.id !== id))
+    } catch (error) {
+      console.error('Error deleting task:', error)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -113,12 +322,31 @@ export default function Dashboard({ user }: DashboardProps) {
         onDateChange={setSelectedDate}
       />
       
+      {/* Notificações Toast */}
+      {activeNotifications.length > 0 && (
+        <div className="fixed top-20 right-6 z-50 space-y-3 max-w-md">
+          {activeNotifications.map((event) => (
+            <NotificationToast
+              key={event.id}
+              event={event}
+              onConfirm={() => handleConfirmNotification(event.id)}
+              onDismiss={() => handleDismissNotification(event.id)}
+            />
+          ))}
+        </div>
+      )}
+      
       <main className="flex-1 flex gap-6 p-6 overflow-hidden">
         {/* Coluna Esquerda - Agenda/Timeline */}
         <div className="flex-1 bg-white rounded-lg border border-gray-200 p-6 shadow-sm overflow-hidden">
           <Timeline
             events={events}
             onAddEvent={() => setIsEventModalOpen(true)}
+            onEditEvent={(event) => {
+              setEditingEvent(event)
+              setIsEditEventModalOpen(true)
+            }}
+            onDeleteEvent={handleDeleteEvent}
           />
         </div>
 
@@ -128,6 +356,11 @@ export default function Dashboard({ user }: DashboardProps) {
             tasks={tasks}
             onToggleTask={handleToggleTask}
             onAddTask={() => setIsTaskModalOpen(true)}
+            onEditTask={(task) => {
+              setEditingTask(task)
+              setIsEditTaskModalOpen(true)
+            }}
+            onDeleteTask={handleDeleteTask}
           />
         </div>
       </main>
@@ -140,10 +373,44 @@ export default function Dashboard({ user }: DashboardProps) {
         selectedDate={selectedDate}
       />
 
+      <EditEventModal
+        isOpen={isEditEventModalOpen}
+        onClose={() => {
+          setIsEditEventModalOpen(false)
+          setEditingEvent(null)
+        }}
+        onSave={handleEditEvent}
+        event={editingEvent}
+      />
+
       <AddTaskModal
         isOpen={isTaskModalOpen}
         onClose={() => setIsTaskModalOpen(false)}
         onSave={handleAddTask}
+      />
+
+      <EditTaskModal
+        isOpen={isEditTaskModalOpen}
+        onClose={() => {
+          setIsEditTaskModalOpen(false)
+          setEditingTask(null)
+        }}
+        onSave={handleEditTask}
+        task={editingTask}
+      />
+
+      <DeleteEventConfirmModal
+        isOpen={isDeleteConfirmModalOpen}
+        onClose={() => {
+          setIsDeleteConfirmModalOpen(false)
+          setEventToDelete(null)
+          setRepeatedEvents([])
+        }}
+        onDeleteOne={handleDeleteOneEvent}
+        onDeleteAll={handleDeleteAllRepeatedEvents}
+        eventTitle={eventToDelete?.title || ''}
+        repeatedCount={repeatedEvents.length}
+        isDeleting={isDeleting}
       />
     </div>
   )

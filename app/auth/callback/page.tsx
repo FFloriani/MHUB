@@ -46,8 +46,10 @@ export default function AuthCallback() {
           router.push('/?error=unexpected')
         }
       } else {
-        console.error('No code in URL')
-        router.push('/?error=no_code')
+        // Se não há código nem erro, pode ser acesso direto à página
+        // Redireciona para home sem erro (o usuário pode já estar logado)
+        console.log('No code in URL, redirecting to home')
+        router.push('/')
       }
     }
 

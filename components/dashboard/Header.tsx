@@ -1,6 +1,6 @@
 'use client'
 
-import { User, LogOut } from 'lucide-react'
+import { User, LogOut, Settings } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import DateSelector from './DateSelector'
 import { signOut } from '@/lib/auth'
@@ -40,6 +40,15 @@ export default function Header({ userEmail, selectedDate, onDateChange }: Header
               <span>{userEmail}</span>
             </div>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push('/settings')}
+            title="Configurações"
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            <span className="hidden sm:inline">Configurações</span>
+          </Button>
           <Button
             variant="ghost"
             size="sm"

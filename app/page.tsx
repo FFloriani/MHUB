@@ -25,9 +25,15 @@ export default function Home() {
       }
       
       // Fallback to getUser if session doesn't work
-      const currentUser = await getUser()
-      console.log('User check:', currentUser?.email || 'No user')
-      setUser(currentUser)
+      try {
+        const currentUser = await getUser()
+        console.log('User check:', currentUser?.email || 'No user')
+        setUser(currentUser)
+      } catch (getUserError) {
+        // If getUser fails, user is not logged in
+        console.log('No user found (not logged in)')
+        setUser(null)
+      }
     } catch (error) {
       console.error('Error checking user:', error)
       setUser(null)
@@ -41,8 +47,11 @@ export default function Home() {
     const urlParams = new URLSearchParams(window.location.search)
     const authSuccess = urlParams.get('auth') === 'success'
     const error = urlParams.get('error')
+    const hasCode = urlParams.get('code') // Se veio do callback OAuth
     
-    if (error) {
+    // Só mostra erro se realmente vier de um processo de autenticação (com código ou erro explícito)
+    // Não mostra erro se for acesso direto à página (sem parâmetros)
+    if (error && (hasCode || error !== 'no_code')) {
       console.error('Auth error:', error)
       let errorMessage = 'Erro na autenticação. '
       
@@ -55,14 +64,16 @@ export default function Home() {
         errorMessage += '4. A URL de callback no Supabase deve ser: ' + window.location.origin + '/auth/callback\n\n'
         errorMessage += 'No Google Console, certifique-se de que a URI de redirecionamento inclui:\n'
         errorMessage += 'https://nguggatugusoogcgjuop.supabase.co/auth/v1/callback'
+      } else if (error === 'no_code') {
+        // Só mostra erro "no_code" se realmente veio do callback sem código
+        errorMessage += 'Não foi possível processar a autenticação. Tente fazer login novamente.'
       } else {
         errorMessage += error
       }
       
       alert(errorMessage)
-      setIsLoading(false)
       window.history.replaceState({}, '', '/')
-      return
+      // Continua verificando o usuário mesmo com erro (pode estar logado)
     }
     
     if (authSuccess) {
@@ -73,6 +84,7 @@ export default function Home() {
         window.history.replaceState({}, '', '/')
       }, 500)
     } else {
+      // Verifica usuário normalmente (pode estar logado ou não)
       checkUser()
     }
     

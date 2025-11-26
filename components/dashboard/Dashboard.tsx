@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { format } from 'date-fns'
 import type { User } from '@supabase/supabase-js'
 import Header from './Header'
@@ -66,11 +66,7 @@ export default function Dashboard({ user }: DashboardProps) {
     setActiveNotifications((prev) => prev.filter((e) => e.id !== eventId))
   }
 
-  useEffect(() => {
-    loadData()
-  }, [selectedDate, user.id])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
       const [eventsData, tasksData] = await Promise.all([
@@ -84,7 +80,11 @@ export default function Dashboard({ user }: DashboardProps) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user.id, selectedDate])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const handleAddEvent = async (data: {
     title: string

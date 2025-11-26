@@ -62,11 +62,17 @@ export async function deleteEvent(id: string) {
 export async function findRepeatedEvents(userId: string, event: Event) {
   // Extrai o horário (HH:mm) do evento
   const startTime = new Date(event.start_time)
-  const endTime = new Date(event.end_time)
   const startHour = startTime.getHours()
   const startMinute = startTime.getMinutes()
-  const endHour = endTime.getHours()
-  const endMinute = endTime.getMinutes()
+  
+  // end_time pode ser null, então verifica antes
+  let endHour: number | null = null
+  let endMinute: number | null = null
+  if (event.end_time) {
+    const endTime = new Date(event.end_time)
+    endHour = endTime.getHours()
+    endMinute = endTime.getMinutes()
+  }
   
   // Busca todos os eventos do usuário com mesmo título
   let query = supabase
@@ -89,13 +95,24 @@ export async function findRepeatedEvents(userId: string, event: Event) {
   // Filtra eventos com mesmo horário (mesma hora e minuto de início e fim)
   const repeated = (data as Event[]).filter((e) => {
     const eStart = new Date(e.start_time)
+    const eStartHour = eStart.getHours()
+    const eStartMinute = eStart.getMinutes()
+    
+    // Compara início
+    if (eStartHour !== startHour || eStartMinute !== startMinute) {
+      return false
+    }
+    
+    // Compara fim (se ambos têm end_time ou ambos não têm)
+    if (endHour === null && e.end_time === null) {
+      return true
+    }
+    if (endHour === null || e.end_time === null) {
+      return false
+    }
+    
     const eEnd = new Date(e.end_time)
-    return (
-      eStart.getHours() === startHour &&
-      eStart.getMinutes() === startMinute &&
-      eEnd.getHours() === endHour &&
-      eEnd.getMinutes() === endMinute
-    )
+    return eEnd.getHours() === endHour && eEnd.getMinutes() === endMinute
   })
   
   return repeated

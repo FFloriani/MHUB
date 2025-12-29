@@ -406,9 +406,9 @@ export default function Dashboard({ user }: DashboardProps) {
         </div>
       )}
 
-      <PageTransition className="flex-1 flex flex-col lg:flex-row gap-8 p-8 overflow-hidden">
+      <PageTransition className="flex-1 flex flex-col lg:flex-row gap-8 p-8 overflow-hidden w-full">
         {/* Coluna Esquerda - Agenda/Timeline */}
-        <div className="flex-1 space-y-6">
+        <div className="flex-1 min-w-0 w-0">
           <div className="bg-white/60 backdrop-blur-xl rounded-3xl border border-white/40 p-8 shadow-glass h-full">
             <Timeline
               events={events}
@@ -438,7 +438,7 @@ export default function Dashboard({ user }: DashboardProps) {
         </div>
 
         {/* Coluna Direita - Tasks/To-Do */}
-        <div className="w-full lg:w-[400px]">
+        <div className="w-full lg:w-[400px] flex-shrink-0">
           <div className="bg-white/60 backdrop-blur-xl rounded-3xl border border-white/40 p-8 shadow-glass h-full sticky top-8">
             <TaskList
               tasks={tasks}

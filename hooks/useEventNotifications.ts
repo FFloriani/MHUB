@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { parseISO, differenceInMinutes, differenceInSeconds } from 'date-fns'
-import { getUpcomingEvents } from '@/lib/data/events'
+import { getUpcomingEvents, type VirtualEvent } from '@/lib/data/events'
 import { getUserSettings, type UserSettingsData } from '@/lib/data/settings'
-import type { Database } from '@/lib/supabase'
 
-type Event = Database['public']['Tables']['events']['Row']
+type Event = VirtualEvent
 
 const CHECK_INTERVAL_MS = 10000 // Verificar a cada 10 segundos para melhor precisão
 const STORAGE_KEY = 'mhub_notified_events'

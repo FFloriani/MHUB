@@ -190,7 +190,7 @@ export default function AddEventModal({
                   onClick={() => toggleDay(day.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     repeatDays.includes(day.value)
-                      ? 'bg-primary text-white'
+                      ? 'bg-secondary text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
@@ -198,10 +198,16 @@ export default function AddEventModal({
                 </button>
               ))}
             </div>
-            {repeatDays.length === 0 && (
-              <p className="text-xs text-gray-500 mt-1">
-                Se nenhum dia for selecionado, o evento não será repetido
+            {repeatDays.length === 0 ? (
+              <p className="text-xs text-gray-500 mt-2">
+                Se nenhum dia for selecionado, o evento aparecerá apenas nesta data
               </p>
+            ) : (
+              <div className="mt-2 p-2 bg-secondary/10 rounded-lg">
+                <p className="text-xs text-secondary font-medium">
+                  ✨ Este evento repetirá para sempre nos dias selecionados até você deletá-lo
+                </p>
+              </div>
             )}
           </div>
 

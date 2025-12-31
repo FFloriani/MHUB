@@ -1,17 +1,18 @@
 'use client'
 
-import { useState } from 'react'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, addYears, subYears, getYear, getMonth } from 'date-fns'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, getYear, getMonth, isWeekend } from 'date-fns'
 import { ptBR } from 'date-fns/locale/pt-BR'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X } from 'lucide-react'
-import Button from '@/components/ui/Button'
-import Card from '@/components/ui/Card'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Sparkles } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface CalendarPickerProps {
   selectedDate: Date
   onDateChange: (date: Date) => void
   isOpen: boolean
   onClose: () => void
+  triggerRef?: React.RefObject<HTMLElement>
 }
 
 type ViewMode = 'calendar' | 'months' | 'years'
@@ -21,12 +22,97 @@ export default function CalendarPicker({
   onDateChange,
   isOpen,
   onClose,
+  triggerRef,
 }: CalendarPickerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [currentMonth, setCurrentMonth] = useState(startOfMonth(selectedDate))
   const [currentYear, setCurrentYear] = useState(getYear(selectedDate))
+  const calendarRef = useRef<HTMLDivElement>(null)
+  const [position, setPosition] = useState<'bottom' | 'top' | 'center'>('center')
+  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({})
 
-  if (!isOpen) return null
+  // Update current month when selected date changes
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentMonth(startOfMonth(selectedDate))
+      setCurrentYear(getYear(selectedDate))
+    }
+  }, [selectedDate, isOpen])
+
+  // Calculate position based on available space
+  useEffect(() => {
+    if (!isOpen) {
+      setPosition('center')
+      return
+    }
+
+    const timer = setTimeout(() => {
+      if (!triggerRef?.current) {
+        setPosition('center')
+        return
+      }
+
+      const triggerRect = triggerRef.current.getBoundingClientRect()
+      const viewportHeight = window.innerHeight
+      const estimatedCalendarHeight = 480
+      const padding = 20
+
+      const spaceBelow = viewportHeight - triggerRect.bottom
+      const spaceAbove = triggerRect.top
+
+      if (spaceBelow >= estimatedCalendarHeight + padding) {
+        setPosition('bottom')
+      } else if (spaceAbove >= estimatedCalendarHeight + padding) {
+        setPosition('top')
+      } else {
+        setPosition('center')
+      }
+    }, 10)
+
+    return () => clearTimeout(timer)
+  }, [isOpen, triggerRef])
+
+  // Close on escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [isOpen, onClose])
+
+  const isCentered = position === 'center'
+
+  // Calculate position for popover
+  useEffect(() => {
+    if (!isOpen || isCentered || !triggerRef?.current) {
+      setPopoverStyle({})
+      return
+    }
+
+    const updatePosition = () => {
+      const triggerRect = triggerRef.current!.getBoundingClientRect()
+      const padding = 12
+
+      setPopoverStyle({
+        left: `${triggerRect.left + triggerRect.width / 2}px`,
+        top: position === 'bottom' ? `${triggerRect.bottom + padding}px` : 'auto',
+        bottom: position === 'top' ? `${window.innerHeight - triggerRect.top + padding}px` : 'auto',
+        transform: 'translateX(-50%)',
+      })
+    }
+
+    updatePosition()
+    window.addEventListener('scroll', updatePosition, true)
+    window.addEventListener('resize', updatePosition)
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [isOpen, isCentered, position, triggerRef])
 
   const handleDateSelect = (date: Date) => {
     onDateChange(date)
@@ -45,21 +131,10 @@ export default function CalendarPicker({
     setViewMode('months')
   }
 
-  const goToPreviousMonth = () => {
-    setCurrentMonth(subMonths(currentMonth, 1))
-  }
-
-  const goToNextMonth = () => {
-    setCurrentMonth(addMonths(currentMonth, 1))
-  }
-
-  const goToPreviousYear = () => {
-    setCurrentYear(currentYear - 1)
-  }
-
-  const goToNextYear = () => {
-    setCurrentYear(currentYear + 1)
-  }
+  const goToPreviousMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
+  const goToNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
+  const goToPreviousYear = () => setCurrentYear(currentYear - 1)
+  const goToNextYear = () => setCurrentYear(currentYear + 1)
 
   const goToToday = () => {
     const today = new Date()
@@ -73,33 +148,32 @@ export default function CalendarPicker({
     const monthStart = startOfMonth(currentMonth)
     const monthEnd = endOfMonth(currentMonth)
     const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd })
-    
-    // Primeiro dia do mês (0 = Domingo, 1 = Segunda, etc.)
     const firstDayOfWeek = monthStart.getDay()
     
-    // Dias da semana
-    const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+    const weekDays = [
+      { short: 'D', full: 'Dom' },
+      { short: 'S', full: 'Seg' },
+      { short: 'T', full: 'Ter' },
+      { short: 'Q', full: 'Qua' },
+      { short: 'Q', full: 'Qui' },
+      { short: 'S', full: 'Sex' },
+      { short: 'S', full: 'Sáb' },
+    ]
     
-    // Criar array completo com dias do mês anterior, atual e próximo
     const calendarDays: Date[] = []
-    
-    // Adicionar dias do mês anterior para completar a primeira semana
     const previousMonth = subMonths(currentMonth, 1)
     const previousMonthEnd = endOfMonth(previousMonth)
-    const daysToShowFromPrevious = firstDayOfWeek
     
-    for (let i = daysToShowFromPrevious - 1; i >= 0; i--) {
+    for (let i = firstDayOfWeek - 1; i >= 0; i--) {
       const day = new Date(previousMonthEnd)
       day.setDate(previousMonthEnd.getDate() - i)
       calendarDays.push(day)
     }
     
-    // Adicionar todos os dias do mês atual
     daysInMonth.forEach(day => calendarDays.push(day))
     
-    // Adicionar dias do próximo mês para completar a última semana (total de 42 dias = 6 semanas)
     const totalDays = calendarDays.length
-    const daysToAdd = 42 - totalDays // 6 semanas x 7 dias = 42
+    const daysToAdd = 42 - totalDays
     
     if (daysToAdd > 0) {
       const nextMonth = addMonths(currentMonth, 1)
@@ -113,78 +187,82 @@ export default function CalendarPicker({
     }
 
     return (
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={goToPreviousMonth}
-              aria-label="Mês anterior"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <button
-              onClick={() => setViewMode('months')}
-              className="px-3 py-1 text-sm font-semibold text-gray-900 hover:bg-gray-100 rounded transition-colors"
-            >
-              {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
-            </button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={goToNextMonth}
-              aria-label="Próximo mês"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={goToToday}
-            className="text-xs"
+      <div className="space-y-4">
+        {/* Month Navigation */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={goToPreviousMonth}
+            className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-all active:scale-95"
+            aria-label="Mês anterior"
           >
-            Hoje
-          </Button>
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          
+          <button
+            onClick={() => setViewMode('months')}
+            className="px-4 py-2 text-base font-bold text-gray-900 hover:bg-gradient-to-r hover:from-primary/10 hover:to-secondary/10 rounded-xl transition-all capitalize"
+          >
+            {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+          </button>
+          
+          <button
+            onClick={goToNextMonth}
+            className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-all active:scale-95"
+            aria-label="Próximo mês"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 mb-2">
-          {weekDays.map((day) => (
+        {/* Week Days Header */}
+        <div className="grid grid-cols-7 gap-1">
+          {weekDays.map((day, i) => (
             <div
-              key={day}
-              className="text-center text-xs font-medium text-gray-500 py-2"
+              key={day.full}
+              className={`
+                text-center text-xs font-semibold py-2 rounded-lg
+                ${i === 0 || i === 6 ? 'text-secondary/70' : 'text-gray-400'}
+              `}
             >
-              {day}
+              <span className="hidden sm:inline">{day.full}</span>
+              <span className="sm:hidden">{day.short}</span>
             </div>
           ))}
         </div>
 
+        {/* Calendar Grid */}
         <div className="grid grid-cols-7 gap-1">
           {calendarDays.map((day, index) => {
             const isSelected = isSameDay(day, selectedDate)
             const isToday = isSameDay(day, new Date())
             const isCurrentMonth = isSameMonth(day, currentMonth)
+            const isWeekendDay = isWeekend(day)
 
             return (
-              <button
+              <motion.button
                 key={`${day.toISOString()}-${index}`}
                 onClick={() => handleDateSelect(day)}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
                 className={`
-                  aspect-square flex items-center justify-center text-sm rounded-lg transition-colors
-                  ${isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
+                  relative aspect-square flex items-center justify-center text-sm font-medium rounded-xl transition-all duration-200
+                  ${!isCurrentMonth && 'opacity-30'}
+                  ${isWeekendDay && isCurrentMonth && !isSelected ? 'text-secondary' : ''}
                   ${isSelected 
-                    ? 'bg-primary text-white font-semibold' 
+                    ? 'bg-gradient-to-br from-primary to-primary-dark text-white shadow-lg shadow-primary/30' 
                     : isToday && isCurrentMonth
-                    ? 'bg-primary/10 text-primary font-semibold hover:bg-primary/20'
+                    ? 'bg-primary/10 text-primary ring-2 ring-primary/30'
                     : isCurrentMonth
-                    ? 'hover:bg-gray-100'
-                    : 'hover:bg-gray-50'
+                    ? 'text-gray-700 hover:bg-gray-100'
+                    : 'text-gray-400 hover:bg-gray-50'
                   }
                 `}
               >
                 {format(day, 'd')}
-              </button>
+                {isToday && !isSelected && (
+                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
+                )}
+              </motion.button>
             )
           })}
         </div>
@@ -195,155 +273,266 @@ export default function CalendarPicker({
   // Render Months View
   const renderMonths = () => {
     const months = [
-      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+      'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+      'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
     ]
+    const currentMonthIndex = getMonth(new Date())
 
     return (
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={goToPreviousYear}
-              aria-label="Ano anterior"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <button
-              onClick={() => setViewMode('years')}
-              className="px-3 py-1 text-sm font-semibold text-gray-900 hover:bg-gray-100 rounded transition-colors"
-            >
-              {currentYear}
-            </button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={goToNextYear}
-              aria-label="Próximo ano"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setViewMode('calendar')}
-            className="text-xs"
+      <div className="space-y-4">
+        {/* Year Navigation */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={goToPreviousYear}
+            className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-all active:scale-95"
+            aria-label="Ano anterior"
           >
-            Voltar
-          </Button>
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          
+          <button
+            onClick={() => setViewMode('years')}
+            className="px-4 py-2 text-base font-bold text-gray-900 hover:bg-gradient-to-r hover:from-primary/10 hover:to-secondary/10 rounded-xl transition-all"
+          >
+            {currentYear}
+          </button>
+          
+          <button
+            onClick={goToNextYear}
+            className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-all active:scale-95"
+            aria-label="Próximo ano"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
 
+        {/* Months Grid */}
         <div className="grid grid-cols-3 gap-2">
           {months.map((month, index) => {
             const isSelected = getMonth(selectedDate) === index && getYear(selectedDate) === currentYear
+            const isCurrentMonthOfYear = index === currentMonthIndex && currentYear === getYear(new Date())
+            
             return (
-              <button
+              <motion.button
                 key={month}
                 onClick={() => handleMonthSelect(index)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 className={`
-                  px-4 py-3 text-sm rounded-lg transition-colors text-center
+                  relative px-4 py-4 text-sm font-medium rounded-xl transition-all duration-200
                   ${isSelected
-                    ? 'bg-primary text-white font-semibold'
-                    : 'bg-gray-50 hover:bg-gray-100 text-gray-900'
+                    ? 'bg-gradient-to-br from-primary to-primary-dark text-white shadow-lg shadow-primary/30'
+                    : isCurrentMonthOfYear
+                    ? 'bg-primary/10 text-primary ring-2 ring-primary/30'
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
                   }
                 `}
               >
                 {month}
-              </button>
+              </motion.button>
             )
           })}
         </div>
+
+        {/* Back Button */}
+        <button
+          onClick={() => setViewMode('calendar')}
+          className="w-full py-2 text-sm font-medium text-gray-500 hover:text-primary transition-colors"
+        >
+          ← Voltar ao calendário
+        </button>
       </div>
     )
   }
 
   // Render Years View
   const renderYears = () => {
-    const startYear = Math.floor(currentYear / 10) * 10
-    const years = Array.from({ length: 12 }, (_, i) => startYear - 1 + i)
+    const startYear = Math.floor(currentYear / 12) * 12
+    const years = Array.from({ length: 12 }, (_, i) => startYear + i)
+    const thisYear = getYear(new Date())
 
     return (
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCurrentYear(currentYear - 10)}
-              aria-label="Década anterior"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <div className="px-3 py-1 text-sm font-semibold text-gray-900">
-              {startYear} - {startYear + 11}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCurrentYear(currentYear + 10)}
-              aria-label="Próxima década"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setViewMode('months')}
-            className="text-xs"
+      <div className="space-y-4">
+        {/* Decade Navigation */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setCurrentYear(currentYear - 12)}
+            className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-all active:scale-95"
+            aria-label="Anos anteriores"
           >
-            Voltar
-          </Button>
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          
+          <div className="px-4 py-2 text-base font-bold text-gray-900">
+            {startYear} - {startYear + 11}
+          </div>
+          
+          <button
+            onClick={() => setCurrentYear(currentYear + 12)}
+            className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-all active:scale-95"
+            aria-label="Próximos anos"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
+        {/* Years Grid */}
+        <div className="grid grid-cols-3 gap-2">
           {years.map((year) => {
             const isSelected = getYear(selectedDate) === year
+            const isThisYear = year === thisYear
+            
             return (
-              <button
+              <motion.button
                 key={year}
                 onClick={() => handleYearSelect(year)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 className={`
-                  px-4 py-3 text-sm rounded-lg transition-colors text-center
+                  relative px-4 py-4 text-sm font-medium rounded-xl transition-all duration-200
                   ${isSelected
-                    ? 'bg-primary text-white font-semibold'
-                    : 'bg-gray-50 hover:bg-gray-100 text-gray-900'
+                    ? 'bg-gradient-to-br from-primary to-primary-dark text-white shadow-lg shadow-primary/30'
+                    : isThisYear
+                    ? 'bg-primary/10 text-primary ring-2 ring-primary/30'
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
                   }
                 `}
               >
                 {year}
-              </button>
+              </motion.button>
             )
           })}
         </div>
+
+        {/* Back Button */}
+        <button
+          onClick={() => setViewMode('months')}
+          className="w-full py-2 text-sm font-medium text-gray-500 hover:text-primary transition-colors"
+        >
+          ← Voltar aos meses
+        </button>
       </div>
     )
   }
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-sm p-6 m-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <CalendarIcon className="w-5 h-5 text-gray-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Selecionar Data</h3>
+  if (!isOpen) return null
+
+  const calendarContent = (
+    <>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[9998]"
+        onClick={onClose}
+      />
+
+      {/* Calendar Popover */}
+      <div
+        ref={calendarRef}
+        className={`
+          ${isCentered 
+            ? 'fixed inset-0 flex items-center justify-center z-[9999] pointer-events-none p-4'
+            : 'fixed z-[9999]'
+          }
+        `}
+        style={isCentered ? undefined : popoverStyle}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: isCentered ? 20 : position === 'top' ? 10 : -10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+          className={`${isCentered ? 'pointer-events-auto' : ''} w-full max-w-[340px]`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-primary via-primary-dark to-secondary p-4 text-white">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className="w-5 h-5" />
+                  <span className="font-semibold">Calendário</span>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="p-1.5 rounded-full hover:bg-white/20 transition-colors"
+                  aria-label="Fechar"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              
+              {/* Selected Date Display */}
+              <div className="space-y-0.5">
+                <p className="text-white/70 text-xs uppercase tracking-wider">
+                  {format(selectedDate, 'EEEE', { locale: ptBR })}
+                </p>
+                <p className="text-2xl font-bold">
+                  {format(selectedDate, "d 'de' MMMM, yyyy", { locale: ptBR })}
+                </p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-4">
+              <AnimatePresence mode="wait">
+                {viewMode === 'calendar' && (
+                  <motion.div
+                    key="calendar"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {renderCalendar()}
+                  </motion.div>
+                )}
+                {viewMode === 'months' && (
+                  <motion.div
+                    key="months"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {renderMonths()}
+                  </motion.div>
+                )}
+                {viewMode === 'years' && (
+                  <motion.div
+                    key="years"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {renderYears()}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Footer */}
+            <div className="px-4 pb-4">
+              <button
+                onClick={goToToday}
+                className="w-full py-3 bg-gradient-to-r from-primary/10 to-secondary/10 hover:from-primary/20 hover:to-secondary/20 text-primary font-semibold rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+              >
+                <Sparkles className="w-4 h-4" />
+                Ir para hoje
+              </button>
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {viewMode === 'calendar' && renderCalendar()}
-        {viewMode === 'months' && renderMonths()}
-        {viewMode === 'years' && renderYears()}
-      </Card>
-    </div>
+        </motion.div>
+      </div>
+    </>
   )
-}
 
+  if (typeof window !== 'undefined') {
+    return createPortal(calendarContent, document.body)
+  }
+
+  return calendarContent
+}

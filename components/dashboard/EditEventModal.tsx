@@ -5,10 +5,10 @@ import { X } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Card from '@/components/ui/Card'
-import type { Database } from '@/lib/supabase'
+import type { VirtualEvent } from '@/lib/data/events'
 import { format, parseISO } from 'date-fns'
 
-type Event = Database['public']['Tables']['events']['Row']
+type Event = VirtualEvent
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Dom' },
@@ -61,7 +61,14 @@ export default function EditEventModal({
         setEndTime(format(start, 'HH:mm'))
       }
       setDescription(event.description || '')
-      setRepeatDays(currentRepeatDays)
+      // Use recurrence_days from the event if available, otherwise use currentRepeatDays
+      if (event.recurrence_days && event.recurrence_days.length > 0) {
+        setRepeatDays(event.recurrence_days)
+      } else if (currentRepeatDays.length > 0) {
+        setRepeatDays(currentRepeatDays)
+      } else {
+        setRepeatDays([])
+      }
     }
   }, [event, currentRepeatDays])
 
@@ -201,7 +208,7 @@ export default function EditEventModal({
                   onClick={() => toggleDay(day.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     repeatDays.includes(day.value)
-                      ? 'bg-primary text-white'
+                      ? 'bg-secondary text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
@@ -209,10 +216,16 @@ export default function EditEventModal({
                 </button>
               ))}
             </div>
-            {repeatDays.length === 0 && (
-              <p className="text-xs text-gray-500 mt-1">
-                Se nenhum dia for selecionado, o evento não será repetido
+            {repeatDays.length === 0 ? (
+              <p className="text-xs text-gray-500 mt-2">
+                Se nenhum dia for selecionado, o evento aparecerá apenas na data original
               </p>
+            ) : (
+              <div className="mt-2 p-2 bg-secondary/10 rounded-lg">
+                <p className="text-xs text-secondary font-medium">
+                  ✨ Este evento repetirá para sempre nos dias selecionados até você deletá-lo
+                </p>
+              </div>
             )}
           </div>
 

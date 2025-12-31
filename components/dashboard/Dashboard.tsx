@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { format } from 'date-fns'
+import { motion } from 'framer-motion'
 import type { User } from '@supabase/supabase-js'
 import DateSelector from './DateSelector'
 import PageTransition from '@/components/layout/PageTransition'
@@ -13,7 +14,7 @@ import AddTaskModal from './AddTaskModal'
 import EditTaskModal from './EditTaskModal'
 import DeleteEventConfirmModal from './DeleteEventConfirmModal'
 import NotificationToast from './NotificationToast'
-import { getEventsByDate, createEvent, updateEvent, deleteEvent, findRepeatedEvents, deleteMultipleEvents } from '@/lib/data/events'
+import { getEventsByDate, createEvent, createRecurringEvent, updateEvent, deleteEvent, findRepeatedEvents, deleteMultipleEvents, isEventRecurring, getParentEvent, type VirtualEvent } from '@/lib/data/events'
 import { getTasksByDate, createTask, updateTask, deleteTask } from '@/lib/data/tasks'
 import { useEventNotifications, markEventAsConfirmed } from '@/hooks/useEventNotifications'
 import type { Database } from '@/lib/supabase'
@@ -21,27 +22,78 @@ import type { Database } from '@/lib/supabase'
 type Event = Database['public']['Tables']['events']['Row']
 type Task = Database['public']['Tables']['tasks']['Row']
 
+// Use VirtualEvent for display which may include virtual recurring instances
+type DisplayEvent = VirtualEvent
+
 interface DashboardProps {
   user: User
 }
 
 export default function Dashboard({ user }: DashboardProps) {
   const [selectedDate, setSelectedDate] = useState(new Date())
-  const [events, setEvents] = useState<Event[]>([])
+  const [events, setEvents] = useState<DisplayEvent[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isEventModalOpen, setIsEventModalOpen] = useState(false)
   const [isEditEventModalOpen, setIsEditEventModalOpen] = useState(false)
-  const [editingEvent, setEditingEvent] = useState<Event | null>(null)
+  const [editingEvent, setEditingEvent] = useState<DisplayEvent | null>(null)
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false)
-  const [eventToDelete, setEventToDelete] = useState<Event | null>(null)
+  const [eventToDelete, setEventToDelete] = useState<DisplayEvent | null>(null)
   const [repeatedEvents, setRepeatedEvents] = useState<Event[]>([])
   const [isDeleting, setIsDeleting] = useState(false)
-  const [activeNotifications, setActiveNotifications] = useState<Event[]>([])
+  const [activeNotifications, setActiveNotifications] = useState<DisplayEvent[]>([])
   const [editingEventRepeatDays, setEditingEventRepeatDays] = useState<number[]>([])
+  const [isTimelineFullscreen, setIsTimelineFullscreen] = useState(false)
+  const [isPopupMode, setIsPopupMode] = useState(false)
+
+  // Check if in popup mode
+  useEffect(() => {
+    const isPopup = localStorage.getItem('mhub_timeline_popup') === 'true'
+    if (isPopup) {
+      setIsPopupMode(true)
+      setIsTimelineFullscreen(true)
+      // Restore selected date if available
+      const savedDate = localStorage.getItem('mhub_selected_date')
+      if (savedDate) {
+        setSelectedDate(new Date(savedDate))
+      }
+    }
+  }, [])
+
+  // Open timeline in popup window
+  const handleOpenTimelinePopup = useCallback(() => {
+    const width = 1400
+    const height = 900
+    const left = (window.screen.width - width) / 2
+    const top = (window.screen.height - height) / 2
+
+    // Store popup state in localStorage
+    localStorage.setItem('mhub_timeline_popup', 'true')
+    localStorage.setItem('mhub_selected_date', format(selectedDate, 'yyyy-MM-dd'))
+
+    // Open popup with current URL
+    const popupUrl = window.location.href
+    
+    const popup = window.open(
+      popupUrl,
+      'timeline-popup',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no`
+    )
+
+    if (popup) {
+      popup.focus()
+      // Clean up after popup closes
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          localStorage.removeItem('mhub_timeline_popup')
+          clearInterval(checkClosed)
+        }
+      }, 500)
+    }
+  }, [selectedDate])
 
   // Handler para novas notificações
   const handleNewNotification = (event: Event) => {
@@ -96,62 +148,31 @@ export default function Dashboard({ user }: DashboardProps) {
     repeatDays: number[]
   }) => {
     try {
-      const baseDate = new Date(data.startTime)
-      const baseHour = baseDate.getHours()
-      const baseMinute = baseDate.getMinutes()
-
-      const baseEndDate = new Date(data.endTime)
-      const baseEndHour = baseEndDate.getHours()
-      const baseEndMinute = baseEndDate.getMinutes()
-
-      // Se não há dias selecionados, cria apenas um evento
+      // Se não há dias selecionados, cria apenas um evento normal
       if (data.repeatDays.length === 0) {
-        const newEvent = await createEvent({
+        await createEvent({
           user_id: user.id,
           title: data.title,
           start_time: data.startTime,
           end_time: data.endTime,
           description: data.description || null,
+          is_recurring: false,
         })
-        setEvents([...events, newEvent].sort((a, b) =>
-          a.start_time.localeCompare(b.start_time)
-        ))
-        await loadData() // Recarrega para garantir que está atualizado
-        return
+      } else {
+        // Cria UM evento recorrente (não mais 30!)
+        // O evento será gerado virtualmente para cada dia especificado
+        await createRecurringEvent({
+          user_id: user.id,
+          title: data.title,
+          start_time: data.startTime,
+          end_time: data.endTime,
+          description: data.description || null,
+          recurrence_days: data.repeatDays,
+          recurrence_end_date: null, // Repete para sempre
+        })
       }
-
-      // Cria eventos repetidos para os próximos 30 dias nos dias selecionados
-      const newEvents: Event[] = []
-      const today = new Date(selectedDate)
-      today.setHours(0, 0, 0, 0)
-
-      for (let i = 0; i < 30; i++) {
-        const checkDate = new Date(today)
-        checkDate.setDate(today.getDate() + i)
-        const dayOfWeek = checkDate.getDay()
-
-        if (data.repeatDays.includes(dayOfWeek)) {
-          const eventStartDate = new Date(checkDate)
-          eventStartDate.setHours(baseHour, baseMinute, 0, 0)
-
-          const eventEndDate = new Date(checkDate)
-          eventEndDate.setHours(baseEndHour, baseEndMinute, 0, 0)
-
-          const event = await createEvent({
-            user_id: user.id,
-            title: data.title,
-            start_time: eventStartDate.toISOString(),
-            end_time: eventEndDate.toISOString(),
-            description: data.description || null,
-          })
-          newEvents.push(event)
-        }
-      }
-
-      setEvents([...events, ...newEvents].sort((a, b) =>
-        a.start_time.localeCompare(b.start_time)
-      ))
-      await loadData() // Recarrega para garantir que está atualizado
+      
+      await loadData() // Recarrega para mostrar o evento
     } catch (error: any) {
       console.error('Error creating event:', error)
       alert(`Erro ao criar compromisso: ${error?.message || JSON.stringify(error)}`)
@@ -167,73 +188,19 @@ export default function Dashboard({ user }: DashboardProps) {
     repeatDays: number[]
   }) => {
     try {
-      const eventToEdit = events.find((e) => e.id === id)
-      if (!eventToEdit) return
-
-      // Se não há dias de repetição selecionados, atualiza apenas o evento atual
-      if (data.repeatDays.length === 0) {
-        const updatedEvent = await updateEvent(id, {
-          title: data.title,
-          start_time: data.startTime,
-          end_time: data.endTime,
-          description: data.description || null,
-        })
-        setEvents(events.map((e) => e.id === id ? updatedEvent : e).sort((a, b) =>
-          a.start_time.localeCompare(b.start_time)
-        ))
-        await loadData()
-        return
-      }
-
-      // Se há dias de repetição, precisa atualizar ou criar eventos repetidos
-      // Primeiro, busca eventos repetidos existentes
-      const repeatedEvents = await findRepeatedEvents(user.id, eventToEdit)
-
-      // Deleta todos os eventos repetidos antigos
-      if (repeatedEvents.length > 0) {
-        const idsToDelete = repeatedEvents.map((e) => e.id)
-        await deleteMultipleEvents(idsToDelete)
-      }
-
-      // Cria novos eventos com os dias de repetição atualizados
-      const baseDate = new Date(data.startTime)
-      const baseHour = baseDate.getHours()
-      const baseMinute = baseDate.getMinutes()
-
-      const baseEndDate = new Date(data.endTime)
-      const baseEndHour = baseEndDate.getHours()
-      const baseEndMinute = baseEndDate.getMinutes()
-
-      const today = new Date(selectedDate)
-      today.setHours(0, 0, 0, 0)
-
-      const newEvents: Event[] = []
-      for (let i = 0; i < 30; i++) {
-        const checkDate = new Date(today)
-        checkDate.setDate(today.getDate() + i)
-        const dayOfWeek = checkDate.getDay()
-
-        if (data.repeatDays.includes(dayOfWeek)) {
-          const eventStartDate = new Date(checkDate)
-          eventStartDate.setHours(baseHour, baseMinute, 0, 0)
-
-          const eventEndDate = new Date(checkDate)
-          eventEndDate.setHours(baseEndHour, baseEndMinute, 0, 0)
-
-          const event = await createEvent({
-            user_id: user.id,
-            title: data.title,
-            start_time: eventStartDate.toISOString(),
-            end_time: eventEndDate.toISOString(),
-            description: data.description || null,
-          })
-          newEvents.push(event)
-        }
-      }
-
-      setEvents([...events.filter((e) => !repeatedEvents.some((re) => re.id === e.id)), ...newEvents].sort((a, b) =>
-        a.start_time.localeCompare(b.start_time)
-      ))
+      // Verifica se estamos editando um evento virtual (recorrente)
+      const realId = id.includes('_') ? id.split('_')[0] : id
+      
+      // Atualiza o evento (ou o evento pai se for virtual)
+      await updateEvent(realId, {
+        title: data.title,
+        start_time: data.startTime,
+        end_time: data.endTime,
+        description: data.description || null,
+        is_recurring: data.repeatDays.length > 0,
+        recurrence_days: data.repeatDays.length > 0 ? data.repeatDays : null,
+      })
+      
       await loadData()
     } catch (error) {
       console.error('Error updating event:', error)
@@ -246,50 +213,40 @@ export default function Dashboard({ user }: DashboardProps) {
     if (!event) return
 
     try {
-      // Busca eventos repetidos
-      const repeated = await findRepeatedEvents(user.id, event)
-
-      // Se há mais de um evento repetido, mostra o modal de confirmação
-      if (repeated.length > 1) {
+      // Verifica se é um evento recorrente
+      const isRecurring = event.is_recurring || event.is_virtual
+      
+      if (isRecurring) {
+        // Mostra modal de confirmação para eventos recorrentes
         setEventToDelete(event)
-        setRepeatedEvents(repeated)
         setIsDeleteConfirmModalOpen(true)
         return
       }
 
-      // Se é apenas um evento, deleta diretamente
+      // Se é um evento único, deleta diretamente
       if (confirm('Tem certeza que deseja deletar este compromisso?')) {
         await deleteEvent(id)
-        setEvents(events.filter((e) => e.id !== id))
         await loadData()
       }
     } catch (error) {
-      console.error('Error checking repeated events:', error)
-      // Em caso de erro, tenta deletar normalmente
-      if (confirm('Tem certeza que deseja deletar este compromisso?')) {
-        try {
-          await deleteEvent(id)
-          setEvents(events.filter((e) => e.id !== id))
-          await loadData()
-        } catch (deleteError) {
-          console.error('Error deleting event:', deleteError)
-          alert('Erro ao deletar compromisso')
-        }
-      }
+      console.error('Error deleting event:', error)
+      alert('Erro ao deletar compromisso')
     }
   }
 
   const handleDeleteOneEvent = async () => {
+    // Para eventos recorrentes, isso agora converte para não-recorrente
+    // ou deleta se não for recorrente
     if (!eventToDelete) return
 
     setIsDeleting(true)
     try {
+      // Se é virtual (instância de recorrente), deleta o evento pai inteiro
+      // Isso deleta TODAS as ocorrências
       await deleteEvent(eventToDelete.id)
-      setEvents(events.filter((e) => e.id !== eventToDelete.id))
       await loadData()
       setIsDeleteConfirmModalOpen(false)
       setEventToDelete(null)
-      setRepeatedEvents([])
     } catch (error) {
       console.error('Error deleting event:', error)
       alert('Erro ao deletar compromisso')
@@ -299,19 +256,17 @@ export default function Dashboard({ user }: DashboardProps) {
   }
 
   const handleDeleteAllRepeatedEvents = async () => {
-    if (!eventToDelete || repeatedEvents.length === 0) return
+    // Deleta o evento recorrente (que remove todas as instâncias virtuais)
+    if (!eventToDelete) return
 
     setIsDeleting(true)
     try {
-      const idsToDelete = repeatedEvents.map((e) => e.id)
-      await deleteMultipleEvents(idsToDelete)
-      setEvents(events.filter((e) => !idsToDelete.includes(e.id)))
+      await deleteEvent(eventToDelete.id)
       await loadData()
       setIsDeleteConfirmModalOpen(false)
       setEventToDelete(null)
-      setRepeatedEvents([])
     } catch (error) {
-      console.error('Error deleting multiple events:', error)
+      console.error('Error deleting recurring event:', error)
       alert('Erro ao deletar compromissos')
     } finally {
       setIsDeleting(false)
@@ -378,19 +333,21 @@ export default function Dashboard({ user }: DashboardProps) {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 p-8 pb-0">
-        <div className="space-y-1">
-          <h1 className="text-4xl font-extrabold tracking-tight">
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary animate-gradient-x">
-              Bom dia, {user.email?.split('@')[0]}!
-            </span>
-          </h1>
-          <p className="text-gray-500 font-medium">Vamos fazer hoje um dia produtivo.</p>
+      {!isPopupMode && (
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 p-8 pb-0">
+          <div className="space-y-1">
+            <h1 className="text-4xl font-extrabold tracking-tight">
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary animate-gradient-x">
+                Bom dia, {user.email?.split('@')[0]}!
+              </span>
+            </h1>
+            <p className="text-gray-500 font-medium">Vamos fazer hoje um dia produtivo.</p>
+          </div>
+          <div className="bg-white/50 backdrop-blur-sm p-1 rounded-2xl border border-white/20 shadow-sm">
+            <DateSelector date={selectedDate} onDateChange={setSelectedDate} />
+          </div>
         </div>
-        <div className="bg-white/50 backdrop-blur-sm p-1 rounded-2xl border border-white/20 shadow-sm">
-          <DateSelector date={selectedDate} onDateChange={setSelectedDate} />
-        </div>
-      </div>
+      )}
 
       {/* Notificações Toast */}
       {activeNotifications.length > 0 && (
@@ -406,53 +363,93 @@ export default function Dashboard({ user }: DashboardProps) {
         </div>
       )}
 
-      <PageTransition className="flex-1 flex flex-col lg:flex-row gap-8 p-8 overflow-hidden w-full">
-        {/* Coluna Esquerda - Agenda/Timeline */}
-        <div className="flex-1 min-w-0 w-0">
-          <div className="bg-white/60 backdrop-blur-xl rounded-3xl border border-white/40 p-8 shadow-glass h-full">
-            <Timeline
-              events={events}
-              onAddEvent={() => setIsEventModalOpen(true)}
-              onEditEvent={async (event) => {
-                setEditingEvent(event)
-                setIsEditEventModalOpen(true)
-                try {
-                  const repeated = await findRepeatedEvents(user.id, event)
-                  if (repeated.length > 1) {
-                    const days = new Set<number>()
-                    repeated.forEach((e) => {
-                      const date = new Date(e.start_time)
-                      days.add(date.getDay())
-                    })
-                    setEditingEventRepeatDays(Array.from(days))
-                  } else {
-                    setEditingEventRepeatDays([])
-                  }
-                } catch {
+      {isPopupMode ? (
+        // Popup mode - only timeline in fullscreen
+        <div className="h-screen w-screen p-4 sm:p-6">
+          <Timeline
+            events={events}
+            onAddEvent={() => setIsEventModalOpen(true)}
+            onEditEvent={async (event) => {
+              setEditingEvent(event)
+              setIsEditEventModalOpen(true)
+              try {
+                const repeated = await findRepeatedEvents(user.id, event)
+                if (repeated.length > 1) {
+                  const days = new Set<number>()
+                  repeated.forEach((e) => {
+                    const date = new Date(e.start_time)
+                    days.add(date.getDay())
+                  })
+                  setEditingEventRepeatDays(Array.from(days))
+                } else {
                   setEditingEventRepeatDays([])
                 }
-              }}
-              onDeleteEvent={handleDeleteEvent}
-            />
-          </div>
+              } catch {
+                setEditingEventRepeatDays([])
+              }
+            }}
+            onDeleteEvent={handleDeleteEvent}
+            isFullscreen={true}
+            onFullscreenChange={(value) => {
+              if (!value) {
+                window.close()
+              }
+            }}
+            onOpenPopup={undefined}
+          />
         </div>
+      ) : (
+        <PageTransition className="flex-1 flex flex-col lg:flex-row gap-8 p-8 overflow-hidden w-full">
+          {/* Coluna Esquerda - Agenda/Timeline */}
+          <div className="flex-1 min-w-0 w-0">
+            <div className="bg-white/60 backdrop-blur-xl rounded-3xl border border-white/40 p-8 shadow-glass h-full">
+              <Timeline
+                events={events}
+                onAddEvent={() => setIsEventModalOpen(true)}
+                onEditEvent={async (event) => {
+                  setEditingEvent(event)
+                  setIsEditEventModalOpen(true)
+                  try {
+                    const repeated = await findRepeatedEvents(user.id, event)
+                    if (repeated.length > 1) {
+                      const days = new Set<number>()
+                      repeated.forEach((e) => {
+                        const date = new Date(e.start_time)
+                        days.add(date.getDay())
+                      })
+                      setEditingEventRepeatDays(Array.from(days))
+                    } else {
+                      setEditingEventRepeatDays([])
+                    }
+                  } catch {
+                    setEditingEventRepeatDays([])
+                  }
+                }}
+                onDeleteEvent={handleDeleteEvent}
+                isFullscreen={isTimelineFullscreen}
+                onFullscreenChange={setIsTimelineFullscreen}
+                onOpenPopup={handleOpenTimelinePopup}
+              />
+            </div>
+          </div>
 
-        {/* Coluna Direita - Tasks/To-Do */}
-        <div className="w-full lg:w-[400px] flex-shrink-0">
-          <div className="bg-white/60 backdrop-blur-xl rounded-3xl border border-white/40 p-8 shadow-glass h-full sticky top-8">
-            <TaskList
-              tasks={tasks}
-              onToggleTask={handleToggleTask}
-              onAddTask={() => setIsTaskModalOpen(true)}
-              onEditTask={(task) => {
-                setEditingTask(task)
-                setIsEditTaskModalOpen(true)
-              }}
-              onDeleteTask={handleDeleteTask}
-            />
+          {/* Coluna Direita - Tasks/To-Do */}
+          <div className="w-full lg:w-[400px] flex-shrink-0">
+            <div className="bg-white/60 backdrop-blur-xl rounded-3xl border border-white/40 p-8 shadow-glass h-full sticky top-8">
+              <TaskList
+                tasks={tasks}
+                onToggleTask={handleToggleTask}
+                onAddTask={() => setIsTaskModalOpen(true)}
+                onEditTask={(task) => {
+                  setEditingTask(task)
+                  setIsEditTaskModalOpen(true)
+                }}
+                onDeleteTask={handleDeleteTask}
+              />
+            </div>
           </div>
-        </div>
-      </PageTransition>
+        </PageTransition>
+      )}
 
       {/* Modais */}
       <AddEventModal
@@ -495,14 +492,58 @@ export default function Dashboard({ user }: DashboardProps) {
         onClose={() => {
           setIsDeleteConfirmModalOpen(false)
           setEventToDelete(null)
-          setRepeatedEvents([])
         }}
         onDeleteOne={handleDeleteOneEvent}
         onDeleteAll={handleDeleteAllRepeatedEvents}
         eventTitle={eventToDelete?.title || ''}
-        repeatedCount={repeatedEvents.length}
+        repeatedCount={0}
         isDeleting={isDeleting}
+        isRecurring={eventToDelete?.is_recurring || eventToDelete?.is_virtual || false}
       />
+
+      {/* Fullscreen Timeline Modal */}
+      {isTimelineFullscreen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] bg-gray-900/95 backdrop-blur-md"
+        >
+          <div className="h-full w-full p-4 sm:p-6">
+            <Timeline
+              events={events}
+              onAddEvent={() => {
+                setIsEventModalOpen(true)
+                setIsTimelineFullscreen(false)
+              }}
+              onEditEvent={async (event) => {
+                setEditingEvent(event)
+                setIsEditEventModalOpen(true)
+                setIsTimelineFullscreen(false)
+                try {
+                  const repeated = await findRepeatedEvents(user.id, event)
+                  if (repeated.length > 1) {
+                    const days = new Set<number>()
+                    repeated.forEach((e) => {
+                      const date = new Date(e.start_time)
+                      days.add(date.getDay())
+                    })
+                    setEditingEventRepeatDays(Array.from(days))
+                  } else {
+                    setEditingEventRepeatDays([])
+                  }
+                } catch {
+                  setEditingEventRepeatDays([])
+                }
+              }}
+              onDeleteEvent={handleDeleteEvent}
+              isFullscreen={true}
+              onFullscreenChange={setIsTimelineFullscreen}
+              onOpenPopup={handleOpenTimelinePopup}
+            />
+          </div>
+        </motion.div>
+      )}
     </div>
   )
 }

@@ -49,6 +49,9 @@ export type Database = {
           start_time: string
           end_time: string | null
           description: string | null
+          is_recurring: boolean
+          recurrence_days: number[] | null
+          recurrence_end_date: string | null
         }
         Insert: {
           id?: string
@@ -57,6 +60,9 @@ export type Database = {
           start_time: string
           end_time?: string | null
           description?: string | null
+          is_recurring?: boolean
+          recurrence_days?: number[] | null
+          recurrence_end_date?: string | null
         }
         Update: {
           id?: string
@@ -65,6 +71,9 @@ export type Database = {
           start_time?: string
           end_time?: string | null
           description?: string | null
+          is_recurring?: boolean
+          recurrence_days?: number[] | null
+          recurrence_end_date?: string | null
         }
       }
       user_settings: {

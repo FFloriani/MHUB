@@ -252,7 +252,7 @@ export async function deleteMultipleEvents(ids: string[]): Promise<void> {
   if (ids.length === 0) return
   
   // Extract real IDs from virtual IDs
-  const realIds = [...new Set(ids.map(id => id.includes('_') ? id.split('_')[0] : id))]
+  const realIds = Array.from(new Set(ids.map(id => id.includes('_') ? id.split('_')[0] : id)))
   
   const { error } = await supabase
     .from('events')

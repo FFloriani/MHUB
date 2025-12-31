@@ -34,7 +34,7 @@ export default function Sidebar({ isOpen, setIsOpen, isExpanded, setIsExpanded, 
         if (isMobile && isOpen) {
             setIsOpen(false)
         }
-    }, [pathname, isMobile])
+    }, [pathname, isMobile, isOpen, setIsOpen])
 
     const handleSignOut = async () => {
         try {

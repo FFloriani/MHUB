@@ -179,7 +179,7 @@ export default function Timeline({
     return { startHour, endHour, lanes, maxLanes: laneEndTimes.length }
   }, [events])
 
-  const scrollToNow = () => {
+  const scrollToNow = useCallback(() => {
     if (scrollContainerRef.current) {
       const now = new Date()
       const currentHour = now.getHours() + now.getMinutes() / 60
@@ -190,12 +190,12 @@ export default function Timeline({
         behavior: 'smooth'
       })
     }
-  }
+  }, [startHour, hourWidth])
 
   // Initial scroll
   useEffect(() => {
     scrollToNow()
-  }, [startHour, hourWidth])
+  }, [scrollToNow])
 
   const getEventStyle = (event: Event, laneIndex: number) => {
     const start = parseISO(event.start_time)

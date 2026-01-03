@@ -265,18 +265,18 @@ const handleEraserMove = (e: PointerEvent) => {
 ## Fases de Implementação
 
 ### Fase 1: Fundação (MVP)
-- [ ] Criar `AnnotationToolbar.tsx` com botões básicos (Leitura, Caneta)
-- [ ] Criar `AnnotationCanvas.tsx` com SVG overlay
-- [ ] Implementar captura de traço (pointerdown/move/up)
-- [ ] Renderizar traços em tempo real
-- [ ] Salvar strokes no Dexie (`pageAnnotations`)
-- [ ] Carregar strokes ao abrir página
+- [x] Criar `AnnotationToolbar.tsx` com botões básicos (Leitura, Caneta)
+- [x] Criar `AnnotationCanvas.tsx` com SVG overlay
+- [x] Implementar captura de traço (pointerdown/move/up)
+- [x] Renderizar traços em tempo real
+- [x] Salvar strokes no Dexie (`pageAnnotations`)
+- [x] Carregar strokes ao abrir página
 
 ### Fase 2: Ferramentas Essenciais
-- [ ] Adicionar Marca-Texto (traço grosso + opacity)
-- [ ] Adicionar Borracha (por stroke)
-- [ ] Adicionar seletor de cores
-- [ ] Adicionar seletor de espessura
+- [x] Adicionar Marca-Texto (traço grosso + opacity)
+- [x] Adicionar Borracha (por stroke)
+- [x] Adicionar seletor de cores
+- [x] Adicionar seletor de espessura
 - [ ] Implementar Desfazer/Refazer (Ctrl+Z, Ctrl+Y)
 
 ### Fase 3: Formas e Texto

@@ -1,14 +1,14 @@
-'use client'
-
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, Minimize, LayoutTemplate, Columns, Grid2X2, Lightbulb } from 'lucide-react'
 import type { LocalFile } from '@/lib/db'
-import { db, type Annotation } from '@/lib/db' // Importando DB Local
+import { db, type Annotation, type Stroke, type ToolType } from '@/lib/db'
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import SelectionMenu from './SelectionMenu'
 import NoteViewer from './NoteViewer'
+import AnnotationToolbar from './AnnotationToolbar'
+import AnnotationCanvas from './AnnotationCanvas'
 
 // Configuração Segura do Worker (Local)
 pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.mjs`;
@@ -35,6 +35,13 @@ export default function PDFReader({ file, onPageChange, initialPage = 1, isDarkM
 
     // State de Anotações (Local)
     const [annotations, setAnnotations] = useState<Annotation[]>([])
+
+    // State do Canvas Overlay
+    const [strokesMap, setStrokesMap] = useState<Record<number, Stroke[]>>({})
+    const [currentTool, setCurrentTool] = useState<ToolType>('hand')
+    const [currentColor, setCurrentColor] = useState('#000000')
+    const [currentWidth, setCurrentWidth] = useState(2)
+
     // Dados da Seleção Atual
     const [selectionData, setSelectionData] = useState<{
         position: { top: number; left: number },
@@ -53,9 +60,19 @@ export default function PDFReader({ file, onPageChange, initialPage = 1, isDarkM
 
         const loadAnnotations = async () => {
             try {
-                // Busca todas as anotações deste arquivo
-                const data = await db.annotations.where('fileId').equals(file.id as number).toArray()
-                setAnnotations(data)
+                // 1. Carrega Notas/Highlights
+                const notesData = await db.annotations.where('fileId').equals(file.id as number).toArray()
+                setAnnotations(notesData)
+
+                // 2. Carrega Canvas Strokes
+                const canvasData = await db.pageAnnotations.where('fileId').equals(file.id as number).toArray()
+                // Transforma array DB em Map por PageNumber
+                const newMap: Record<number, Stroke[]> = {}
+                canvasData.forEach(page => {
+                    newMap[page.pageNumber] = page.strokes
+                })
+                setStrokesMap(newMap)
+
             } catch (err) {
                 console.error('Erro ao carregar anotações:', err)
             }
@@ -63,122 +80,89 @@ export default function PDFReader({ file, onPageChange, initialPage = 1, isDarkM
         loadAnnotations()
     }, [file])
 
+    // CARREGAR PDF (Revogar URL anterior para evitar vazamento de memória)
     useEffect(() => {
-        if (!containerRef.current) return
-        const updateSize = () => {
-            if (containerRef.current) {
-                setContainerSize({
-                    width: containerRef.current.clientWidth,
-                    height: containerRef.current.clientHeight
-                })
-            }
-        }
-        updateSize()
-        window.addEventListener('resize', updateSize)
-        return () => window.removeEventListener('resize', updateSize)
-    }, [isFullscreen])
-
-    useEffect(() => {
-        if (file?.file) {
+        if (file.file instanceof Blob) {
             const url = URL.createObjectURL(file.file)
             setFileUrl(url)
             return () => URL.revokeObjectURL(url)
         }
     }, [file])
 
-    function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
-        setNumPages(numPages)
-        setError(null)
-    }
-
-    // MONITOR DE SELEÇÃO
+    // MONITOR DE TAMANHO DO CONTAINER (Responsividade)
     useEffect(() => {
-        const handleSelectionChange = () => {
-            const selection = window.getSelection()
-            // Se perdeu seleção, fecha o menu (com cuidado)
-            if (!selection || selection.isCollapsed) {
-                // Lógica de fechar pode ficar aqui se quiser auto-close agressivo
+        if (!containerRef.current) return
+        const observer = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                setContainerSize({
+                    width: entry.contentRect.width,
+                    height: entry.contentRect.height
+                })
             }
-        }
-        document.addEventListener('selectionchange', handleSelectionChange)
-        return () => document.removeEventListener('selectionchange', handleSelectionChange)
+        })
+        observer.observe(containerRef.current)
+        return () => observer.disconnect()
     }, [])
 
-    // FINALIZAÇÃO DO CLIQUE (Captura geometria da seleção IMEDIATAMENTE)
-    const handleMouseUp = (e: React.MouseEvent) => {
-        // Se o clique foi DENTRO do menu, ignora (não fecha nada)
-        if ((e.target as HTMLElement).closest('.selection-menu-container')) {
-            return
-        }
+    function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
+        setNumPages(numPages)
+    }
+
+    // LÓGICA DE SELEÇÃO DE TEXTO
+    const handleMouseUp = useCallback(() => {
+        if (currentTool !== 'hand') return // Ignora seleção se estiver desenhando
 
         const selection = window.getSelection()
-        if (!selection || selection.isCollapsed) {
-            // Se clicou fora (no papel) e não tem seleção, limpa tudo
+        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
             setSelectionData(null)
             return
         }
 
+        const range = selection.getRangeAt(0)
         const text = selection.toString().trim()
-        if (text.length > 0) {
-            const range = selection.getRangeAt(0)
-            const rect = range.getBoundingClientRect()
+        if (!text) return
 
-            // Busca página
-            let node = selection.anchorNode
-            let pageElement: HTMLElement | null = null
-            while (node && node !== document.body) {
-                if (node instanceof HTMLElement && node.classList.contains('react-pdf__Page')) {
-                    pageElement = node
-                    break
-                }
-                node = node?.parentNode || null
-            }
+        // Encontra a página pai
+        const pageElement = range.commonAncestorContainer.parentElement?.closest('.react-pdf__Page') as HTMLElement
+        if (!pageElement) return
 
-            if (!pageElement) return
+        const pageNumber = Number(pageElement.getAttribute('data-page-number'))
+        const pageRect = pageElement.getBoundingClientRect()
+        const clientRects = Array.from(range.getClientRects())
 
-            // CALCULA AGORA (SNAPSHOT)
-            // Assim não dependemos da seleção continuar ativa depois
-            const pageRect = pageElement.getBoundingClientRect()
-            const clientRects = Array.from(range.getClientRects())
+        // Normaliza coordenadas (0 a 100%) relativas à página
+        const normalizedRects = clientRects.map(rect => ({
+            top: ((rect.top - pageRect.top) / pageRect.height) * 100,
+            left: ((rect.left - pageRect.left) / pageRect.width) * 100,
+            width: (rect.width / pageRect.width) * 100,
+            height: (rect.height / pageRect.height) * 100
+        }))
 
-            const normalizedRects = clientRects.map(r => ({
-                top: ((r.top - pageRect.top) / pageRect.height) * 100,
-                left: ((r.left - pageRect.left) / pageRect.width) * 100,
-                width: (r.width / pageRect.width) * 100,
-                height: (r.height / pageRect.height) * 100
-            }))
+        // Posição do menu (centro da seleção)
+        const lastRect = clientRects[clientRects.length - 1]
+        setSelectionData({
+            position: {
+                top: lastRect.bottom + 10,
+                left: lastRect.left + (lastRect.width / 2)
+            },
+            text,
+            normalizedRects,
+            pageNumber,
+            pageElement
+        })
+    }, [currentTool])
 
-            const pageAttr = pageElement.getAttribute('data-page-number')
-            const targetPage = pageAttr ? parseInt(pageAttr) : pageNumber
-
-            setSelectionData({
-                text,
-                position: {
-                    top: rect.top,
-                    left: rect.left + (rect.width / 2)
-                },
-                normalizedRects: normalizedRects,
-                pageNumber: targetPage,
-                pageElement: pageElement
-            })
-        }
-    }
-
-    // SALVAR NOVA NOTA
-    const handleAddNote = async (text: string, note: string) => {
-        // Agora usamos os dados JÁ calculados do state
+    // ADICIONAR NOTA (Salva no Dexie)
+    const handleAddNote = async (note: string, color: string) => {
         if (!selectionData || !file.id) return
-
-        // Debug
-        console.log('Salvando (Snapshot):', selectionData.normalizedRects)
 
         const newAnnotation: Annotation = {
             fileId: file.id,
             page_number: selectionData.pageNumber,
-            quote: text,
+            quote: selectionData.text,
             note,
-            color: '#fde047',
-            rects: selectionData.normalizedRects, // Usa o snapshot
+            color,
+            rects: selectionData.normalizedRects,
             createdAt: new Date()
         }
 
@@ -224,11 +208,108 @@ export default function PDFReader({ file, onPageChange, initialPage = 1, isDarkM
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [changePage])
 
+    // CANVAS HANDLERS
+    const onStrokeCompleteHandler = async (page: number, stroke: Stroke) => {
+        if (!file.id) return
+
+        // 1. Update State (Optimistic)
+        const currentStrokes = strokesMap[page] || []
+        const newStrokes = [...currentStrokes, stroke]
+        setStrokesMap(prev => ({ ...prev, [page]: newStrokes }))
+
+        // 2. Persist
+        try {
+            const existing = await db.pageAnnotations
+                .where('fileId').equals(file.id)
+                .filter(p => p.pageNumber === page)
+                .first()
+
+            if (existing && existing.id) {
+                await db.pageAnnotations.update(existing.id, {
+                    strokes: newStrokes,
+                    lastModified: new Date()
+                })
+            } else {
+                await db.pageAnnotations.add({
+                    fileId: file.id,
+                    pageNumber: page,
+                    strokes: newStrokes,
+                    shapes: [],
+                    textBoxes: [],
+                    lastModified: new Date()
+                })
+            }
+        } catch (err) {
+            console.error('Error saving stroke:', err)
+        }
+    }
+
+    const onStrokeDeleteHandler = async (page: number, strokeId: string) => {
+        if (!file.id) return
+
+        const currentStrokes = strokesMap[page] || []
+        const newStrokes = currentStrokes.filter(s => s.id !== strokeId)
+        setStrokesMap(prev => ({ ...prev, [page]: newStrokes }))
+
+        try {
+            const existing = await db.pageAnnotations
+                .where('fileId').equals(file.id)
+                .filter(p => p.pageNumber === page)
+                .first()
+
+            if (existing && existing.id) {
+                await db.pageAnnotations.update(existing.id, {
+                    strokes: newStrokes,
+                    lastModified: new Date()
+                })
+            }
+        } catch (err) {
+            console.error('Error deleting stroke:', err)
+        }
+    }
+
+    const onClearPageHandler = async () => {
+        if (!file.id) return
+
+        setStrokesMap(prev => ({ ...prev, [pageNumber]: [] }))
+
+        try {
+            const existing = await db.pageAnnotations
+                .where('fileId').equals(file.id)
+                .filter(p => p.pageNumber === pageNumber)
+                .first()
+
+            if (existing && existing.id) {
+                await db.pageAnnotations.update(existing.id, {
+                    strokes: [],
+                    lastModified: new Date()
+                })
+            }
+        } catch (err) {
+            console.error('Error clearing page:', err)
+        }
+    }
+
     return (
         <div
             onMouseUp={handleMouseUp}
             className={`flex flex-col items-center justify-start h-full bg-gray-900 overflow-hidden relative ${isFullscreen ? 'fixed inset-0 z-50' : 'rounded-3xl'}`}
         >
+            {/* Toolbar Overlay do Canvas */}
+            <AnnotationToolbar
+                currentTool={currentTool}
+                onToolChange={setCurrentTool}
+                currentColor={currentColor}
+                onColorChange={setCurrentColor}
+                currentWidth={currentWidth}
+                onWidthChange={setCurrentWidth}
+                canUndo={false}
+                canRedo={false}
+                onUndo={() => { }}
+                onRedo={() => { }}
+                onClear={onClearPageHandler}
+            />
+
             {error && (
                 <div className="absolute inset-0 z-30 flex items-center justify-center bg-gray-900/90 p-8">
                     <div className="bg-red-500/10 border border-red-500/50 rounded-2xl p-6 text-center text-white">
@@ -304,9 +385,19 @@ export default function PDFReader({ file, onPageChange, initialPage = 1, isDarkM
                                         height={finalHeight}
                                         renderTextLayer={true}
                                         renderAnnotationLayer={true}
-                                        className="border border-white/5 bg-white"
+                                        className="border border-white/5 bg-white relative"
                                         loading=""
-                                    />
+                                    >
+                                        <AnnotationCanvas
+                                            pageNumber={pageToRender}
+                                            strokes={strokesMap[pageToRender] || []}
+                                            currentTool={currentTool}
+                                            currentColor={currentColor}
+                                            currentWidth={currentWidth}
+                                            onStrokeComplete={(stroke) => onStrokeCompleteHandler(pageToRender, stroke)}
+                                            onStrokeDelete={(strokeId) => onStrokeDeleteHandler(pageToRender, strokeId)}
+                                        />
+                                    </Page>
 
                                     {/* CAMADA DE HIGHLIGHTS (Notas Salvas) */}
                                     <div className="absolute inset-0 pointer-events-none z-10">
@@ -317,20 +408,17 @@ export default function PDFReader({ file, onPageChange, initialPage = 1, isDarkM
                                                     {annotation.rects.map((rect, i) => (
                                                         <div
                                                             key={i}
-                                                            // CORREÇÃO VISUAL: Amarelo Forte + Transparência Segura
-                                                            // O mix-blend-mode falhou em alguns browsers, então voltamos pro seguro.
                                                             className="absolute cursor-pointer pointer-events-auto hover:opacity-75 transition-all"
                                                             style={{
                                                                 top: `${rect.top}%`,
                                                                 left: `${rect.left}%`,
                                                                 width: `${rect.width}%`,
                                                                 height: `${rect.height}%`,
-                                                                backgroundColor: '#facc15', // Amarelo Ouro (Mais forte que o anterior)
-                                                                opacity: 0.5 // Transparência fixa para garantir leitura
+                                                                backgroundColor: '#facc15',
+                                                                opacity: 0.5
                                                             }}
                                                             onClick={(e) => {
                                                                 e.stopPropagation()
-                                                                // Calcula posição do mouse na tela para abrir o balão perto do clique
                                                                 const clickRect = (e.target as HTMLElement).getBoundingClientRect()
                                                                 setActiveNote({
                                                                     annotation,

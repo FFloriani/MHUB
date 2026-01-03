@@ -32,11 +32,10 @@ export default function Sidebar({ isOpen, setIsOpen, isExpanded, setIsExpanded, 
     const { user } = useAuth()
 
     // Fecha sidebar ao navegar (mobile)
+    // Fecha sidebar ao navegar (mobile)
     useEffect(() => {
-        if (isOpen) {
-            setIsOpen(false)
-        }
-    }, [pathname])
+        setIsOpen(false)
+    }, [pathname, setIsOpen])
 
     const handleSignOut = async () => {
         try {

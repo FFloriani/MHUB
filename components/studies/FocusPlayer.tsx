@@ -79,6 +79,7 @@ export default function FocusPlayer({ subjectId }: FocusPlayerProps) {
         })
 
         return () => subscription.unsubscribe()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const fetchPlaylist = async (userId: string) => {
@@ -142,8 +143,10 @@ export default function FocusPlayer({ subjectId }: FocusPlayerProps) {
 
     useEffect(() => {
         if (settings && settings.lastPlayedLink && !currentUrl) {
+            // eslint-disable-next-line react-hooks/exhaustive-deps
             loadVideo(settings.lastPlayedLink, settings.volume ? settings.volume * 100 : 50)
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [settings])
 
     const getVideoId = (url: string) => {

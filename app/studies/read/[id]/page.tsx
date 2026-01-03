@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { ArrowLeft, Clock, CheckCircle, Calendar, ListTodo } from 'lucide-react'
@@ -36,10 +36,6 @@ export default function ReaderPage() {
     const [isEventModalOpen, setIsEventModalOpen] = useState(false)
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
 
-    useEffect(() => {
-        loadBook()
-    }, [id])
-
     // Timer Logic
     useEffect(() => {
         if (isPaused || isCheckoutOpen) return
@@ -54,7 +50,7 @@ export default function ReaderPage() {
         return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
     }
 
-    const loadBook = async () => {
+    const loadBook = useCallback(async () => {
         if (!id) return
         try {
             const foundFile = await db.files.get(Number(id))
@@ -72,7 +68,11 @@ export default function ReaderPage() {
         } finally {
             setIsLoading(false)
         }
-    }
+    }, [id, router])
+
+    useEffect(() => {
+        loadBook()
+    }, [loadBook])
 
     const handlePageUpdate = (page: number) => {
         if (file?.id) {

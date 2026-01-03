@@ -46,7 +46,7 @@ export default function NoteViewer({ annotation, position, onClose, onDelete }: 
                 {/* A citação (Texto marcado) */}
                 <div className="pl-2 border-l-2 border-yellow-500/30">
                     <p className="text-gray-400 text-xs italic line-clamp-3">
-                        "{annotation.quote}"
+                        &quot;{annotation.quote}&quot;
                     </p>
                 </div>
 

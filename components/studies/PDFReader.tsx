@@ -204,12 +204,16 @@ export default function PDFReader({ file, onPageChange, initialPage = 1, isDarkM
         }
     }
 
-    const changePage = (direction: -1 | 1) => {
+    const changePage = useCallback((direction: -1 | 1) => {
         const offset = direction * gridSize
-        const newPage = Math.min(Math.max(1, pageNumber + offset), numPages)
-        setPageNumber(newPage)
-        onPageChange(newPage)
-    }
+        setPageNumber(prevPage => {
+            const newPage = Math.min(Math.max(1, prevPage + offset), numPages)
+            if (newPage !== prevPage) {
+                onPageChange(newPage)
+            }
+            return newPage
+        })
+    }, [gridSize, numPages, onPageChange])
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -218,7 +222,7 @@ export default function PDFReader({ file, onPageChange, initialPage = 1, isDarkM
         }
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [pageNumber, numPages, gridSize])
+    }, [changePage])
 
     return (
         <div

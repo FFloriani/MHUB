@@ -38,3 +38,6 @@ client_secret_*.json
 *.tsbuildinfo
 next-env.d.ts
 
+
+# backups
+bkup/

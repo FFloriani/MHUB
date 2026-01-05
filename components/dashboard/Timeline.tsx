@@ -14,6 +14,7 @@ interface TimelineProps {
   onAddEvent: () => void
   onEditEvent: (event: Event) => void
   onDeleteEvent: (id: string) => void
+  onUpdateEvent?: (id: string, updates: { start_time?: string; end_time?: string }) => Promise<void>
   isFullscreen?: boolean
   onFullscreenChange?: (isFullscreen: boolean) => void
   onOpenPopup?: () => void
@@ -45,6 +46,7 @@ export default function Timeline({
   onAddEvent,
   onEditEvent,
   onDeleteEvent,
+  onUpdateEvent,
   isFullscreen = false,
   onFullscreenChange,
   onOpenPopup,
@@ -58,10 +60,256 @@ export default function Timeline({
   const [currentTime, setCurrentTime] = useState(new Date())
   const [hoveredEventId, setHoveredEventId] = useState<string | null>(null)
 
+  const wasDraggingRef = useRef(false)
+  const dragElementRef = useRef<HTMLElement | null>(null)
+
+
   // Calculated dimensions based on zoom (apenas horizontal)
   const hourWidth = baseWidth * zoomLevel
   const EVENT_HEIGHT = BASE_EVENT_HEIGHT  // Altura fixa
   const EVENT_GAP = BASE_EVENT_GAP        // Gap fixo
+
+  // Auto-scroll para hora atual ao carregar
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      const currentHour = new Date().getHours()
+      scrollContainerRef.current.scrollLeft = Math.max(0, currentHour - 1) * hourWidth
+    }
+  }, []) // Executa apenas na montagem
+
+
+  // Drag & Resize states
+  const [dragState, setDragState] = useState<{
+    eventId: string
+    mode: 'move' | 'resize-left' | 'resize-right'
+    startX: number
+    originalEvent: Event
+    scrollLeft: number
+  } | null>(null)
+
+  // Calculate dynamic range and lanes (MOVED UP)
+  const { startHour, endHour, lanes, maxLanes } = useMemo(() => {
+    if (events.length === 0) {
+      return {
+        startHour: 0,
+        endHour: 24,
+        lanes: [],
+        maxLanes: 0
+      }
+    }
+
+    let minStart = 24
+    let maxEnd = 0
+
+    const sortedEvents = [...events].sort((a, b) => {
+      const startA = parseISO(a.start_time).getTime()
+      const startB = parseISO(b.start_time).getTime()
+      if (startA !== startB) return startA - startB
+
+      const endA = a.end_time ? parseISO(a.end_time).getTime() : startA
+      const endB = b.end_time ? parseISO(b.end_time).getTime() : startB
+      return (endB - startB) - (endA - startA)
+    })
+
+    // Fixando range para estabilidade visual durante drag & drop
+    const startHour = 0
+    const endHour = 24
+
+    const lanes: { event: Event; laneIndex: number; colorIndex: number }[] = []
+    const laneEndTimes: number[] = []
+
+    sortedEvents.forEach((event, index) => {
+      const start = parseISO(event.start_time)
+      const end = event.end_time ? parseISO(event.end_time) : start
+      const duration = Math.max(differenceInMinutes(end, start), 15) // Minimo 15 min
+      const effectiveEnd = start.getTime() + duration * 60 * 1000
+
+      let laneIndex = -1
+
+      for (let i = 0; i < laneEndTimes.length; i++) {
+        if (laneEndTimes[i] <= start.getTime()) {
+          laneIndex = i
+          laneEndTimes[i] = effectiveEnd
+          break
+        }
+      }
+
+      if (laneIndex === -1) {
+        laneIndex = laneEndTimes.length
+        laneEndTimes.push(effectiveEnd)
+      }
+
+      lanes.push({ event, laneIndex, colorIndex: index % EVENT_COLORS.length })
+    })
+
+    return { startHour, endHour, lanes, maxLanes: laneEndTimes.length }
+  }, [events])
+
+  // Helper: Snap to 5-minute intervals
+  const snapTo5Minutes = (minutes: number) => Math.round(minutes / 5) * 5
+
+  // Helper: Create ISO datetime from date + hours/minutes
+  const createDateTime = useCallback((date: Date, hours: number, minutes: number) => {
+    const d = new Date(date)
+    d.setHours(hours, minutes, 0, 0)
+    return d.toISOString()
+  }, [])
+
+  // Handle drag/resize move
+  const handleDragMove = useCallback((e: MouseEvent) => {
+    if (!dragState || !scrollContainerRef.current) return
+    wasDraggingRef.current = true
+
+
+    const deltaX = e.clientX - dragState.startX
+    const scrollDelta = scrollContainerRef.current.scrollLeft - dragState.scrollLeft
+    const totalDeltaX = deltaX + scrollDelta
+
+    const originalStart = parseISO(dragState.originalEvent.start_time)
+    const originalEnd = dragState.originalEvent.end_time
+      ? parseISO(dragState.originalEvent.end_time)
+      : new Date(originalStart.getTime() + 30 * 60 * 1000)
+    const durationMs = originalEnd.getTime() - originalStart.getTime()
+
+    const deltaHours = totalDeltaX / hourWidth
+    const deltaMinutes = deltaHours * 60 // Pixel-perfect float (sem snap visual)
+
+    if (dragState.mode === 'move') {
+      const newStartMinutes = originalStart.getHours() * 60 + originalStart.getMinutes() + deltaMinutes
+      const clampedStartMinutes = Math.max(0, Math.min(23 * 60 + 55, newStartMinutes))
+
+      const eventEl = dragElementRef.current
+      if (eventEl) {
+        const startHourFloat = Math.floor(clampedStartMinutes / 60) + (clampedStartMinutes % 60) / 60
+        eventEl.style.left = `${(startHourFloat - startHour) * hourWidth}px`
+      }
+    } else if (dragState.mode === 'resize-right') {
+      const originalEndMinutes = originalEnd.getHours() * 60 + originalEnd.getMinutes()
+      const newEndMinutes = originalEndMinutes + deltaMinutes
+      const startMinutes = originalStart.getHours() * 60 + originalStart.getMinutes()
+      const clampedEndMinutes = Math.max(startMinutes + 15, Math.min(24 * 60, newEndMinutes))
+
+      const eventEl = dragElementRef.current
+      if (eventEl) {
+        const durationHours = (clampedEndMinutes - startMinutes) / 60
+        eventEl.style.width = `${Math.max(durationHours * hourWidth, 50)}px`
+      }
+    } else if (dragState.mode === 'resize-left') {
+      const originalStartMinutes = originalStart.getHours() * 60 + originalStart.getMinutes()
+      const newStartMinutes = originalStartMinutes + deltaMinutes
+      const endMinutes = originalEnd.getHours() * 60 + originalEnd.getMinutes()
+      const clampedStartMinutes = Math.max(0, Math.min(endMinutes - 15, newStartMinutes))
+
+      const eventEl = dragElementRef.current
+      if (eventEl) {
+        const startHourFloat = Math.floor(clampedStartMinutes / 60) + (clampedStartMinutes % 60) / 60
+        const durationHours = (endMinutes - clampedStartMinutes) / 60
+        eventEl.style.left = `${(startHourFloat - startHour) * hourWidth}px`
+        eventEl.style.width = `${Math.max(durationHours * hourWidth, 50)}px`
+      }
+    }
+  }, [dragState, hourWidth, selectedDate, createDateTime, startHour])
+
+  // Handle drag/resize end
+  const handleDragEnd = useCallback((e: MouseEvent) => {
+    if (!dragState || !onUpdateEvent || !scrollContainerRef.current) {
+      setDragState(null)
+      return
+    }
+
+    const deltaX = e.clientX - dragState.startX
+    const scrollDelta = scrollContainerRef.current.scrollLeft - dragState.scrollLeft
+    const totalDeltaX = deltaX + scrollDelta
+
+    const originalStart = parseISO(dragState.originalEvent.start_time)
+    const originalEnd = dragState.originalEvent.end_time
+      ? parseISO(dragState.originalEvent.end_time)
+      : new Date(originalStart.getTime() + 30 * 60 * 1000)
+
+    const deltaHours = totalDeltaX / hourWidth
+    const deltaMinutes = snapTo5Minutes(deltaHours * 60)
+
+    if (deltaMinutes === 0) {
+      setDragState(null)
+      // Mantém wasDraggingRef como está (false se click, true se drag cancelado)
+      // para garantir comportamento correto no onClick
+      return
+    }
+
+    let newStartTime: string | undefined
+    let newEndTime: string | undefined
+
+    if (dragState.mode === 'move') {
+      const originalStartMinutes = originalStart.getHours() * 60 + originalStart.getMinutes()
+      const newStartMinutes = Math.max(0, Math.min(23 * 60 + 55, originalStartMinutes + deltaMinutes))
+      const durationMs = originalEnd.getTime() - originalStart.getTime()
+
+      newStartTime = createDateTime(selectedDate, Math.floor(newStartMinutes / 60), newStartMinutes % 60)
+      newEndTime = new Date(new Date(newStartTime).getTime() + durationMs).toISOString()
+    } else if (dragState.mode === 'resize-right') {
+      const originalEndMinutes = originalEnd.getHours() * 60 + originalEnd.getMinutes()
+      const startMinutes = originalStart.getHours() * 60 + originalStart.getMinutes()
+      const newEndMinutes = Math.max(startMinutes + 15, Math.min(24 * 60, originalEndMinutes + deltaMinutes))
+
+      newEndTime = createDateTime(selectedDate, Math.floor(newEndMinutes / 60), newEndMinutes % 60)
+    } else if (dragState.mode === 'resize-left') {
+      const originalStartMinutes = originalStart.getHours() * 60 + originalStart.getMinutes()
+      const endMinutes = originalEnd.getHours() * 60 + originalEnd.getMinutes()
+      const newStartMinutes = Math.max(0, Math.min(endMinutes - 15, originalStartMinutes + deltaMinutes))
+
+      newStartTime = createDateTime(selectedDate, Math.floor(newStartMinutes / 60), newStartMinutes % 60)
+    }
+
+    setDragState(null)
+    setTimeout(() => { wasDraggingRef.current = false }, 50)
+
+    if (newStartTime || newEndTime) {
+      onUpdateEvent(dragState.eventId, {
+        ...(newStartTime && { start_time: newStartTime }),
+        ...(newEndTime && { end_time: newEndTime })
+      }).catch(err => console.error('Failed to update event:', err))
+    }
+  }, [dragState, onUpdateEvent, hourWidth, selectedDate, createDateTime])
+
+  // Attach global mouse listeners when dragging
+  useEffect(() => {
+    if (dragState) {
+      document.addEventListener('mousemove', handleDragMove)
+      document.addEventListener('mouseup', handleDragEnd)
+      document.body.style.cursor = dragState.mode === 'move' ? 'grabbing' : 'col-resize'
+      document.body.style.userSelect = 'none'
+
+      return () => {
+        document.removeEventListener('mousemove', handleDragMove)
+        document.removeEventListener('mouseup', handleDragEnd)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+  }, [dragState, handleDragMove, handleDragEnd])
+
+  // Start drag/resize
+  const startDrag = useCallback((e: React.MouseEvent, event: Event, mode: 'move' | 'resize-left' | 'resize-right') => {
+    e.stopPropagation()
+
+    if (!onUpdateEvent) return
+
+    // Capture element ref for high-performance direct manipulation
+    let cardElement = e.currentTarget as HTMLElement
+    if (mode.startsWith('resize')) {
+      cardElement = cardElement.parentElement as HTMLElement
+    }
+    dragElementRef.current = cardElement
+
+    wasDraggingRef.current = false
+    setDragState({
+      eventId: event.id,
+      mode,
+      startX: e.clientX,
+      originalEvent: event,
+      scrollLeft: scrollContainerRef.current?.scrollLeft || 0
+    })
+  }, [onUpdateEvent])
 
   // Navigation Handlers
   const handlePrevDay = () => onDateChange?.(subDays(selectedDate, 1))
@@ -140,74 +388,7 @@ export default function Timeline({
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // Calculate dynamic range and lanes
-  const { startHour, endHour, lanes, maxLanes } = useMemo(() => {
-    if (events.length === 0) {
-      const currentH = new Date().getHours() // Usa hora atual para focar
-      return {
-        startHour: Math.max(0, currentH - 2),
-        endHour: Math.min(24, currentH + 8),
-        lanes: [],
-        maxLanes: 0
-      }
-    }
 
-    let minStart = 24
-    let maxEnd = 0
-
-    const sortedEvents = [...events].sort((a, b) => {
-      const startA = parseISO(a.start_time).getTime()
-      const startB = parseISO(b.start_time).getTime()
-      if (startA !== startB) return startA - startB
-
-      const endA = a.end_time ? parseISO(a.end_time).getTime() : startA
-      const endB = b.end_time ? parseISO(b.end_time).getTime() : startB
-      return (endB - startB) - (endA - startA)
-    })
-
-    sortedEvents.forEach(event => {
-      const start = parseISO(event.start_time)
-      const end = event.end_time ? parseISO(event.end_time) : start
-
-      const s = start.getHours()
-      const e = end.getHours() + (end.getMinutes() > 0 ? 1 : 0)
-
-      if (s < minStart) minStart = s
-      if (e > maxEnd) maxEnd = e
-    })
-
-    const startHour = Math.max(0, minStart - 1)
-    const endHour = Math.min(24, Math.max(maxEnd + 2, minStart + 8))
-
-    const lanes: { event: Event; laneIndex: number; colorIndex: number }[] = []
-    const laneEndTimes: number[] = []
-
-    sortedEvents.forEach((event, index) => {
-      const start = parseISO(event.start_time)
-      const end = event.end_time ? parseISO(event.end_time) : start
-      const duration = Math.max(differenceInMinutes(end, start), 15)
-      const effectiveEnd = start.getTime() + duration * 60 * 1000
-
-      let laneIndex = -1
-
-      for (let i = 0; i < laneEndTimes.length; i++) {
-        if (laneEndTimes[i] <= start.getTime()) {
-          laneIndex = i
-          laneEndTimes[i] = effectiveEnd
-          break
-        }
-      }
-
-      if (laneIndex === -1) {
-        laneIndex = laneEndTimes.length
-        laneEndTimes.push(effectiveEnd)
-      }
-
-      lanes.push({ event, laneIndex, colorIndex: index % EVENT_COLORS.length })
-    })
-
-    return { startHour, endHour, lanes, maxLanes: laneEndTimes.length }
-  }, [events])
 
   const scrollToNow = useCallback(() => {
     if (scrollContainerRef.current) {
@@ -502,6 +683,7 @@ export default function Timeline({
               {lanes.map(({ event, laneIndex, colorIndex }) => {
                 const style = getEventStyle(event, laneIndex)
                 const isHovered = hoveredEventId === event.id
+                const isDragging = dragState?.eventId === event.id
                 const isRecurring = event.is_recurring || event.is_virtual
                 const color = isRecurring
                   ? { bg: 'from-pink-500 to-rose-500', border: 'border-pink-500', light: 'bg-pink-50', text: 'text-pink-600' }
@@ -510,26 +692,45 @@ export default function Timeline({
                 return (
                   <motion.div
                     key={event.id}
+                    layout={isDragging ? undefined : "position"}
                     initial={{ opacity: 0, scale: 0.9, y: 10 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                    className="absolute group"
+                    className={`absolute group ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
                     style={{
                       ...style,
-                      zIndex: isHovered ? 50 : 10,
+                      zIndex: isDragging ? 100 : (isHovered ? 50 : 10),
                     }}
                     onMouseEnter={() => setHoveredEventId(event.id)}
                     onMouseLeave={() => setHoveredEventId(null)}
+                    onMouseDown={(e) => startDrag(e, event, 'move')}
                     onClick={(e) => {
                       e.stopPropagation()
-                      onEditEvent(event)
+                      if (!wasDraggingRef.current) {
+                        onEditEvent(event)
+                      }
                     }}
                   >
+                    {/* Resize Handle Left */}
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-3 cursor-col-resize z-20 hover:bg-black/10 transition-colors"
+                      onMouseDown={(e) => startDrag(e, event, 'resize-left')}
+                    />
+
+                    {/* Resize Handle Right */}
+                    <div
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-20 hover:bg-black/10 transition-colors"
+                      onMouseDown={(e) => startDrag(e, event, 'resize-right')}
+                    />
+
                     {/* Event Card */}
                     <motion.div
-                      whileHover={{ scale: 1.02, y: -2 }}
-                      className={`h-full rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer border-l-4 ${color.border}`}
+                      whileHover={{ scale: isDragging ? 1 : 1.02, y: isDragging ? 0 : -2 }}
+                      className={`h-full rounded-xl transition-all duration-200 overflow-hidden cursor-pointer border-l-4 ${color.border} ${isDragging
+                        ? 'shadow-2xl ring-2 ring-primary/50 scale-[1.02] brightness-105'
+                        : 'shadow-md hover:shadow-xl'
+                        }`}
                     >
                       {/* Gradient background */}
                       <div className={`absolute inset-0 bg-gradient-to-r ${color.bg} opacity-10`} />

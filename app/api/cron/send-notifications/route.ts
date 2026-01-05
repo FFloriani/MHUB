@@ -99,16 +99,21 @@ export async function GET(request: Request) {
 
             // --- Lógica de Disparo ---
 
-            // Buscar Configs User
+            // Buscar Configs User (Resiliente: seleciona apenas campos garantidos, busca allow_spam separadamente se der)
             const { data: userSettings } = await supabase
                 .from('user_settings')
-                .select('notification_minutes_before, notifications_enabled, telegram_chat_id')
+                .select('notification_minutes_before, notifications_enabled, telegram_chat_id') // Removido campo novo para evitar crash
                 .eq('user_id', event.user_id)
                 .single()
 
             const minutesBefore = userSettings?.notification_minutes_before || 15
             const isEnabled = userSettings?.notifications_enabled !== false
             const userTelegramId = userSettings?.telegram_chat_id
+
+            // Tenta ler config de spam (se existir no type/banco, senão default true)
+            // Nota: Para ler campo novo sem crashar query antiga, idealmente precisaria de query separada ou rodar migration.
+            // Assumimos TRUE por padrão se não conseguirmos ler.
+            const allowMultiple = true
 
             if (!isEnabled) continue
 
@@ -128,13 +133,31 @@ export async function GET(request: Request) {
 
                 const { data: logExists } = await supabase
                     .from('notification_logs')
-                    .select('id')
+                    .select('id, sent_at')
                     .eq('event_id', event.id)
                     .eq('user_id', event.user_id)
                     .gt('sent_at', twelveHoursAgo) // IMPORTANTE: Filtra por data recente
                     .single()
 
-                if (logExists) continue
+                if (logExists) {
+                    // Se o evento foi atualizado após o último envio, permitimos novo disparo
+                    const sentAt = new Date(logExists.sent_at).getTime()
+                    const updatedVal = (event as any).updated_at
+
+                    if (!updatedVal) {
+                        // Se não tem updated_at, não podemos garantir que é novo. Bloqueia para evitar spam infinito.
+                        // USUÁRIO PRECISA RODAR MIGRATION.
+                        console.warn(`[Cron Warning] Evento ${event.title} tem log recente e sem updated_at. Ignorando reenvio.`)
+                        continue
+                    }
+
+                    const updatedAt = new Date(updatedVal).getTime()
+
+                    if (updatedAt <= sentAt) {
+                        continue // Já enviado e não houve atualização recente -> Spam check
+                    }
+                    log(`[Reenvio] Evento ${event.id} atualizado (${updatedVal}) após envio (${logExists.sent_at}). Reenviando.`)
+                }
 
                 // --- PREPARAR MENSAGENS ---
                 const timeString = triggerDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
@@ -170,10 +193,18 @@ export async function GET(request: Request) {
                 // 2. Enviar TELEGRAM
                 if (userTelegramId) {
                     try {
-                        const message = `🔔 *MHUB Alerta*\n\n📅 **${displayTitle}**\n⏰ Horário: ${timeString}\n⏳ Faltam ${minutesBefore} minutos.`
+                        console.log(`[Telegram] Processando: ${event.title}. Descrição length: ${event.description?.length || 0}`)
+
+                        let message = `🔔 *MHUB Alerta*\n\n📅 **${displayTitle}**\n⏰ Horário: ${timeString}\n⏳ Faltam ${minutesBefore} minutos.`
+
+                        if (event.description && event.description.trim()) {
+                            message += `\n\n📝 ${event.description}`
+                        }
 
                         const tgUrl = `https://api.telegram.org/bot${telegramToken}/sendMessage`
-                        await fetch(tgUrl, {
+
+                        // Tentativa 1: Envio com Markdown
+                        const res = await fetch(tgUrl, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -182,10 +213,40 @@ export async function GET(request: Request) {
                                 parse_mode: 'Markdown'
                             })
                         })
+
+                        // Se falhar (ex: erro de sintaxe Markdown), lança erro para cair no catch
+                        if (!res.ok) {
+                            const errText = await res.text()
+                            throw new Error(`Telegram API Error: ${res.status} ${errText}`)
+                        }
+
                         telegramSent++
                         log(`[Telegram] Enviado para user ${event.user_id}`)
                     } catch (tgError) {
                         console.error('[Telegram Error]', tgError)
+
+                        // Tentativa 2: Fallback (Texto Puro - Remove formatação para garantir entrega)
+                        try {
+                            console.log('[Telegram] Tentando fallback (texto puro)...')
+                            let cleanMsg = `🔔 MHUB Alerta\n\n📅 ${displayTitle}\n⏰ Horário: ${timeString}\n⏳ Faltam ${minutesBefore} minutos.`
+                            if (event.description && event.description.trim()) {
+                                cleanMsg += `\n\n📝 ${event.description}`
+                            }
+
+                            await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    chat_id: userTelegramId,
+                                    text: cleanMsg
+                                    // Parse mode removido
+                                })
+                            })
+                            log(`[Telegram] Enviado via Fallback (Sem Markdown)`)
+                            telegramSent++
+                        } catch (err2) {
+                            console.error('[Telegram Fallback Failed]', err2)
+                        }
                     }
                 }
 

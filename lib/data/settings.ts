@@ -5,18 +5,21 @@ type UserSettings = Database['public']['Tables']['user_settings']['Row']
 type UserSettingsInsert = Database['public']['Tables']['user_settings']['Insert']
 type UserSettingsUpdate = Database['public']['Tables']['user_settings']['Update'] & {
   telegram_chat_id?: string | null
+  allow_multiple_notifications?: boolean
 }
 
 export interface UserSettingsData {
   notifications_enabled: boolean
   notification_minutes_before: number
-  telegram_chat_id?: string | null // Novo campo
+  telegram_chat_id?: string | null
+  allow_multiple_notifications?: boolean
 }
 
 const DEFAULT_SETTINGS: UserSettingsData = {
   notifications_enabled: false,
   notification_minutes_before: 15,
-  telegram_chat_id: null
+  telegram_chat_id: null,
+  allow_multiple_notifications: true
 }
 
 export async function getUserSettings(userId: string): Promise<UserSettingsData> {
@@ -35,7 +38,8 @@ export async function getUserSettings(userId: string): Promise<UserSettingsData>
     return {
       notifications_enabled: data.notifications_enabled ?? DEFAULT_SETTINGS.notifications_enabled,
       notification_minutes_before: data.notification_minutes_before ?? DEFAULT_SETTINGS.notification_minutes_before,
-      telegram_chat_id: data.telegram_chat_id // Mapeando o novo campo
+      telegram_chat_id: data.telegram_chat_id,
+      allow_multiple_notifications: (data as any).allow_multiple_notifications ?? DEFAULT_SETTINGS.allow_multiple_notifications
     }
   } catch (error) {
     console.error('Error fetching user settings:', error)
@@ -57,7 +61,8 @@ export async function updateUserSettings(
     const payload: UserSettingsUpdate = {
       notifications_enabled: settings.notifications_enabled,
       notification_minutes_before: settings.notification_minutes_before,
-      telegram_chat_id: settings.telegram_chat_id // Permitindo update
+      telegram_chat_id: settings.telegram_chat_id,
+      allow_multiple_notifications: settings.allow_multiple_notifications
     }
 
     // Remove undefined keys
@@ -75,7 +80,8 @@ export async function updateUserSettings(
       return {
         notifications_enabled: data.notifications_enabled,
         notification_minutes_before: data.notification_minutes_before,
-        telegram_chat_id: data.telegram_chat_id
+        telegram_chat_id: data.telegram_chat_id,
+        allow_multiple_notifications: (data as any).allow_multiple_notifications
       }
     } else {
       const { data, error } = await supabase

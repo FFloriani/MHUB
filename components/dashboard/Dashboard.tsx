@@ -132,6 +132,32 @@ export default function Dashboard({ user }: DashboardProps) {
     }
   }
 
+  const handleUpdateEvent = async (id: string, updates: { start_time?: string; end_time?: string }) => {
+    // 1. Optimistic Update (Visual instantâneo)
+    const oldEvents = [...events]
+    setEvents(prev => prev.map(evt => {
+      // Verifica ID exato ou ID virtual (para recorrências na visualização)
+      if (evt.id === id) {
+        return { ...evt, ...updates }
+      }
+      return evt
+    }))
+
+    try {
+      // 2. Persistência em background
+      await updateEvent(id, updates)
+
+      // 3. Sync final silencioso (opcional, para garantir consistência de recorrências complexas)
+      const freshEvents = await getEventsByDate(user.id, selectedDate)
+      setEvents(freshEvents)
+    } catch (error) {
+      console.error('Error updating event via drag:', error)
+      // Rollback em caso de erro
+      setEvents(oldEvents)
+      alert('Erro ao mover evento. Tente novamente.')
+    }
+  }
+
   const handleDeleteEvent = async (id: string) => {
     const event = events.find((e) => e.id === id)
     if (!event) return
@@ -271,6 +297,7 @@ export default function Dashboard({ user }: DashboardProps) {
               } catch { setEditingEventRepeatDays([]) }
             }}
             onDeleteEvent={handleDeleteEvent}
+            onUpdateEvent={handleUpdateEvent}
             isFullscreen={true}
             onFullscreenChange={(value) => !value && window.close()}
             selectedDate={selectedDate}
@@ -294,6 +321,7 @@ export default function Dashboard({ user }: DashboardProps) {
                   } catch { setEditingEventRepeatDays([]) }
                 }}
                 onDeleteEvent={handleDeleteEvent}
+                onUpdateEvent={handleUpdateEvent}
                 isFullscreen={isTimelineFullscreen}
                 onFullscreenChange={setIsTimelineFullscreen}
                 onOpenPopup={handleOpenTimelinePopup}

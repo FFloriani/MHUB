@@ -149,7 +149,7 @@ Arquivos de config: tailwind.config.ts, next.config.js, tsconfig.json, postcss.c
 PARTE 3: FUNCIONALIDADES E FLUXOS
 3.1 Funcionalidades Principais (Core Features)
 1. MÓDULO AGENDA/DASHBOARD
-Descrição: Timeline visual horizontal com eventos do dia, suporte a eventos recorrentes, drag horizontal para navegar, zoom ctrl+scroll
+Descrição: Timeline visual horizontal com eventos do dia, suporte a eventos recorrentes, drag horizontal para navegar, zoom ctrl+scroll, drag-and-drop de eventos pixel-perfect (60fps) com resize fluido.
 Onde está: 
 components/dashboard/Dashboard.tsx
 , 
@@ -184,7 +184,7 @@ Canvas Anotações PDF	Desenhar/escrever sobre PDFs	Estudos	Sim
 3.3 Funcionalidades Planejadas/Futuras
 Feature	Status	Evidências
 Heatmap de Estudos	Stub	app/studies/page.tsx linha 56: "Heatmap de inconsistência (Em Breve)"
-Integração Telegram completa	Parcialmente implementado	components/settings/TelegramSettings.tsx
+Integração Telegram completa	Implementado (Descrições Ricas + Anti-Spam Inteligente)	components/settings/TelegramSettings.tsx
 Cron Jobs para notificações	Implementado	app/api/cron/send-notifications/route.ts, cronjobapi.md
 3.4 Jornada do Usuário (Fluxo Principal)
 FLUXO PRIMÁRIO - AGENDA:
@@ -209,14 +209,14 @@ PARTE 4: ARQUITETURA DE DADOS
 4.1 Entidades Principais (Supabase)
 Entidade	Tabela	Campos Críticos	Consumidores
 User	Supabase Auth	id, email	Todos os módulos
-Event	events	id, user_id, title, start_time, end_time, is_recurring, recurrence_days	Timeline, Dashboard
+Event	events	id, user_id, title, start_time, end_time, is_recurring, recurrence_days, updated_at	Timeline, Dashboard
 Task	tasks	id, user_id, title, is_completed, target_date	TaskList, Dashboard
 Revenue	revenues	id, user_id, category, amount, month, year	FinancialDashboard
 Investment	investments	id, user_id, category, amount, month, year	FinancialDashboard
 Expense	expenses	id, user_id, type, category, item, amount, month, year	FinancialDashboard
 Subject	subjects	id, user_id, name, color, level, xp_current, xp_next_level	Studies
 StudySession	study_sessions	id, user_id, subject_id, duration_minutes, xp_earned	Studies
-UserSettings	user_settings	id, user_id, notifications_enabled, notification_minutes_before	Settings
+UserSettings	user_settings	id, user_id, notifications_enabled, notification_minutes_before, allow_multiple_notifications	Settings
 PlaylistItem	study_playlist_items	id, user_id, title, url	FocusPlayer
 4.2 Entidades Locais (IndexedDB - Dexie)
 Entidade	Tabela	Campos Críticos	Consumidores
@@ -470,7 +470,7 @@ Orientação	Placeholders em inputs, empty states
 OPERAÇÕES PESADAS IDENTIFICADAS:
 
 Operação	Local	Impacto	Otimização
-Renderização Timeline	Timeline.tsx	Médio	useMemo para cálculos de lanes
+Renderização Timeline	Timeline.tsx	Médio	useMemo para cálculos, useRef e Direct DOM manipulation para Drag (60fps)
 Carregamento PDF	PDFReader.tsx	Alto	Worker em arquivo separado, URL.createObjectURL
 Strokes Canvas	AnnotationCanvas.tsx	Médio	Estado local com persist ao DB
 Busca eventos recorrentes	events.ts	Médio	VirtualEvents calculados dinamicamente

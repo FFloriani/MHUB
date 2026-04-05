@@ -1,10 +1,17 @@
 'use client'
 
-import { useState } from 'react'
-import { X } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Dumbbell, Calendar } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Card from '@/components/ui/Card'
+import { useAuth } from '@/components/providers/AuthProvider'
+import {
+  getActiveWorkoutPlan,
+  getWorkoutDays,
+  formatWorkoutDescription,
+  type WorkoutDay
+} from '@/lib/data/workout'
 
 interface AddEventModalProps {
   isOpen: boolean
@@ -14,7 +21,7 @@ interface AddEventModalProps {
     startTime: string
     endTime: string
     description: string
-    repeatDays: number[] // 0 = Domingo, 1 = Segunda, etc.
+    repeatDays: number[]
   }) => Promise<void>
   selectedDate: Date
 }
@@ -29,18 +36,60 @@ const DAYS_OF_WEEK = [
   { value: 6, label: 'Sáb' },
 ]
 
+type EventType = 'normal' | 'workout'
+
 export default function AddEventModal({
   isOpen,
   onClose,
   onSave,
   selectedDate,
 }: AddEventModalProps) {
+  const { user } = useAuth()
+  const [eventType, setEventType] = useState<EventType>('normal')
   const [title, setTitle] = useState('')
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
   const [description, setDescription] = useState('')
   const [repeatDays, setRepeatDays] = useState<number[]>([])
   const [isSaving, setIsSaving] = useState(false)
+
+  // Estados para Treino
+  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>([])
+  const [selectedWorkoutDay, setSelectedWorkoutDay] = useState<string | null>(null)
+  const [loadingWorkout, setLoadingWorkout] = useState(false)
+
+  // Carregar dias de treino quando tipo muda para workout
+  useEffect(() => {
+    if (eventType === 'workout' && user && workoutDays.length === 0) {
+      loadWorkoutDays()
+    }
+  }, [eventType, user])
+
+  async function loadWorkoutDays() {
+    if (!user) return
+    setLoadingWorkout(true)
+    try {
+      const plan = await getActiveWorkoutPlan(user.id)
+      if (plan) {
+        const days = await getWorkoutDays(plan.id)
+        setWorkoutDays(days)
+        // Selecionar primeiro dia automaticamente
+        if (days.length > 0) {
+          handleSelectWorkoutDay(days[0])
+        }
+      }
+    } catch (err) {
+      console.error('Error loading workout days:', err)
+    } finally {
+      setLoadingWorkout(false)
+    }
+  }
+
+  function handleSelectWorkoutDay(day: WorkoutDay) {
+    setSelectedWorkoutDay(day.id)
+    setTitle(`🏋️ Treino ${day.day_letter} - ${day.name}`)
+    setDescription(formatWorkoutDescription(day))
+  }
 
   if (!isOpen) return null
 
@@ -55,7 +104,6 @@ export default function AddEventModal({
     setIsSaving(true)
 
     try {
-      // Fix: Usar data local para evitar problema de UTC virar o dia
       const year = selectedDate.getFullYear()
       const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
       const day = String(selectedDate.getDate()).padStart(2, '0')
@@ -73,11 +121,13 @@ export default function AddEventModal({
       })
 
       // Reset form
+      setEventType('normal')
       setTitle('')
       setStartTime('09:00')
       setEndTime('10:00')
       setDescription('')
       setRepeatDays([])
+      setSelectedWorkoutDay(null)
       onClose()
     } catch (error: any) {
       console.error('Error saving event:', error)
@@ -115,6 +165,86 @@ export default function AddEventModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Seletor de Tipo de Evento */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tipo de Evento
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEventType('normal')
+                  setTitle('')
+                  setDescription('')
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all ${eventType === 'normal'
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                  }`}
+              >
+                <Calendar className="w-5 h-5" />
+                <span className="font-medium">Normal</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEventType('workout')}
+                className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all ${eventType === 'workout'
+                    ? 'border-orange-500 bg-orange-50 text-orange-700'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                  }`}
+              >
+                <Dumbbell className="w-5 h-5" />
+                <span className="font-medium">Treino</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Seletor de Dia de Treino (quando tipo = workout) */}
+          {eventType === 'workout' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Qual Treino?
+              </label>
+              {loadingWorkout ? (
+                <div className="text-center py-4 text-gray-500">Carregando...</div>
+              ) : workoutDays.length === 0 ? (
+                <div className="p-4 bg-orange-50 rounded-xl text-center">
+                  <p className="text-sm text-orange-700 mb-2">
+                    Você ainda não configurou seu treino.
+                  </p>
+                  <a
+                    href="/workout"
+                    className="text-sm font-medium text-orange-600 hover:underline"
+                  >
+                    Configurar agora →
+                  </a>
+                </div>
+              ) : (
+                <div className="flex gap-2 flex-wrap">
+                  {workoutDays.map((day) => (
+                    <button
+                      key={day.id}
+                      type="button"
+                      onClick={() => handleSelectWorkoutDay(day)}
+                      className={`px-4 py-2 rounded-xl font-medium transition-all ${selectedWorkoutDay === day.id
+                          ? 'text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      style={{
+                        backgroundColor: selectedWorkoutDay === day.id ? day.color : undefined,
+                      }}
+                    >
+                      <span className="font-bold">{day.day_letter}</span>
+                      <span className="ml-1 text-sm opacity-80">({day.name})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Título */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Título
@@ -122,11 +252,13 @@ export default function AddEventModal({
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex: Reunião com equipe"
+              placeholder={eventType === 'workout' ? 'Selecione o treino acima' : 'Ex: Reunião com equipe'}
               required
+              disabled={eventType === 'workout' && !selectedWorkoutDay}
             />
           </div>
 
+          {/* Horários */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -152,19 +284,22 @@ export default function AddEventModal({
             </div>
           </div>
 
+          {/* Descrição */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descrição (opcional)
+              Descrição {eventType === 'workout' && '(auto-preenchida)'}
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white text-gray-900 placeholder-gray-500 resize-none"
-              rows={3}
-              placeholder="Adicione detalhes sobre o compromisso..."
+              rows={eventType === 'workout' ? 6 : 3}
+              placeholder={eventType === 'workout' ? 'Exercícios serão listados aqui' : 'Adicione detalhes...'}
+              readOnly={eventType === 'workout'}
             />
           </div>
 
+          {/* Repetição */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">
@@ -194,8 +329,8 @@ export default function AddEventModal({
                   type="button"
                   onClick={() => toggleDay(day.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${repeatDays.includes(day.value)
-                      ? 'bg-secondary text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-secondary text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                 >
                   {day.label}
@@ -227,7 +362,7 @@ export default function AddEventModal({
             <Button
               type="submit"
               variant="primary"
-              disabled={isSaving}
+              disabled={isSaving || (eventType === 'workout' && !selectedWorkoutDay)}
             >
               {isSaving ? 'Salvando...' : 'Salvar'}
             </Button>
@@ -237,3 +372,4 @@ export default function AddEventModal({
     </div>
   )
 }
+

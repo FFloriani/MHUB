@@ -5,7 +5,7 @@ import { getUserSettings, type UserSettingsData } from '@/lib/data/settings'
 
 type Event = VirtualEvent
 
-const CHECK_INTERVAL_MS = 10000 // Verificar a cada 10 segundos para melhor precisão
+const CHECK_INTERVAL_MS = 300000 // Verificar a cada 5 minutos (reduz consumo de banco)
 const STORAGE_KEY = 'mhub_notified_events'
 const CONFIRMED_KEY = 'mhub_confirmed_notifications'
 
@@ -31,22 +31,22 @@ async function requestNotificationPermission(): Promise<boolean> {
 // Função para obter eventos já notificados do localStorage
 function getNotifiedEvents(): Set<string> {
   if (typeof window === 'undefined') return new Set()
-  
+
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (!stored) return new Set()
-    
+
     const data = JSON.parse(stored)
     const eventIds = data.eventIds || []
     const timestamp = data.timestamp || 0
-    
+
     // Limpar eventos antigos (mais de 24 horas)
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
     if (timestamp < oneDayAgo) {
       localStorage.removeItem(STORAGE_KEY)
       return new Set()
     }
-    
+
     return new Set(eventIds)
   } catch {
     return new Set()
@@ -56,22 +56,22 @@ function getNotifiedEvents(): Set<string> {
 // Função para obter eventos confirmados (visualizados pelo usuário)
 function getConfirmedEvents(): Set<string> {
   if (typeof window === 'undefined') return new Set()
-  
+
   try {
     const stored = localStorage.getItem(CONFIRMED_KEY)
     if (!stored) return new Set()
-    
+
     const data = JSON.parse(stored)
     const eventIds = data.eventIds || []
     const timestamp = data.timestamp || 0
-    
+
     // Limpar eventos antigos (mais de 24 horas)
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
     if (timestamp < oneDayAgo) {
       localStorage.removeItem(CONFIRMED_KEY)
       return new Set()
     }
-    
+
     return new Set(eventIds)
   } catch {
     return new Set()
@@ -81,11 +81,11 @@ function getConfirmedEvents(): Set<string> {
 // Função para marcar evento como notificado
 function markEventAsNotified(eventId: string) {
   if (typeof window === 'undefined') return
-  
+
   try {
     const notified = getNotifiedEvents()
     notified.add(eventId)
-    
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       eventIds: Array.from(notified),
       timestamp: Date.now(),
@@ -98,11 +98,11 @@ function markEventAsNotified(eventId: string) {
 // Função para marcar evento como confirmado (visualizado)
 export function markEventAsConfirmed(eventId: string) {
   if (typeof window === 'undefined') return
-  
+
   try {
     const confirmed = getConfirmedEvents()
     confirmed.add(eventId)
-    
+
     localStorage.setItem(CONFIRMED_KEY, JSON.stringify({
       eventIds: Array.from(confirmed),
       timestamp: Date.now(),
@@ -119,11 +119,11 @@ function sendSystemNotification(event: Event) {
   }
 
   const startTime = parseISO(event.start_time)
-  const timeStr = startTime.toLocaleTimeString('pt-BR', { 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  const timeStr = startTime.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit'
   })
-  
+
   const notification = new Notification('MHUB - Compromisso em breve', {
     body: `${event.title}\nHorário: ${timeStr}${event.description ? `\n${event.description}` : ''}`,
     icon: '/favicon.ico',
@@ -192,16 +192,12 @@ export function useEventNotifications(
     // Função para verificar eventos próximos
     const checkUpcomingEvents = async () => {
       try {
-        // Recarregar configurações para pegar atualizações
-        const currentSettings = await getUserSettings(userId)
-        setSettings(currentSettings)
-
-        // Se notificações foram desabilitadas, parar
-        if (!currentSettings.notifications_enabled) {
+        // Usar settings do estado (já carregado) em vez de fazer nova query
+        if (!settings.notifications_enabled) {
           return
         }
 
-        const notificationMinutes = currentSettings.notification_minutes_before
+        const notificationMinutes = settings.notification_minutes_before
         const upcomingEvents = await getUpcomingEvents(userId, 1) // Próximas 24 horas
         const now = new Date()
         const notifiedEvents = getNotifiedEvents()
@@ -213,11 +209,11 @@ export function useEventNotifications(
           const secondsUntilEvent = differenceInSeconds(eventStartTime, now)
 
           // Verifica se está no intervalo de notificação (mais flexível: até 1 minuto após o tempo configurado)
-          const shouldNotify = 
-            minutesUntilEvent <= notificationMinutes && 
+          const shouldNotify =
+            minutesUntilEvent <= notificationMinutes &&
             minutesUntilEvent >= notificationMinutes - 1 &&
             secondsUntilEvent > 0 // Ainda não passou do horário
-          
+
           const alreadyNotified = notifiedEvents.has(event.id)
           const alreadyConfirmed = confirmedEvents.has(event.id)
 

@@ -42,7 +42,8 @@ export default function TaskList({ tasks, onToggleTask, onAddTask, onEditTask, o
             animate={{ opacity: 1, y: 0 }}
             className="text-center text-gray-400 py-12 bg-white/50 rounded-2xl border border-dashed border-gray-200"
           >
-            <p>Nenhuma tarefa para hoje</p>
+            <p>Nenhuma obrigação pendente</p>
+            <p className="text-xs mt-1">Adicione tarefas para se organizar</p>
           </motion.div>
         )}
 

@@ -16,7 +16,7 @@ import EditTaskModal from './EditTaskModal'
 import DeleteEventConfirmModal from './DeleteEventConfirmModal'
 import NotificationToast from './NotificationToast'
 import { getEventsByDate, createEvent, createRecurringEvent, updateEvent, deleteEvent, findRepeatedEvents, deleteMultipleEvents, isEventRecurring, getParentEvent, type VirtualEvent } from '@/lib/data/events'
-import { getTasksByDate, createTask, updateTask, deleteTask } from '@/lib/data/tasks'
+import { getAllTasks, createTask, updateTask, deleteTask } from '@/lib/data/tasks'
 import { useEventNotifications, markEventAsConfirmed } from '@/hooks/useEventNotifications'
 import type { Database } from '@/lib/supabase'
 
@@ -87,20 +87,31 @@ export default function Dashboard({ user }: DashboardProps) {
     setActiveNotifications((prev) => prev.filter((e) => e.id !== eventId))
   }
 
-  const loadData = useCallback(async () => {
+  const loadEvents = useCallback(async () => {
     try {
-      const [eventsData, tasksData] = await Promise.all([
-        getEventsByDate(user.id, selectedDate),
-        getTasksByDate(user.id, selectedDate),
-      ])
+      const eventsData = await getEventsByDate(user.id, selectedDate)
       setEvents(eventsData)
+    } catch (error) {
+      console.error('Error loading events:', error)
+    }
+  }, [user.id, selectedDate])
+
+  const loadTasks = useCallback(async () => {
+    try {
+      const tasksData = await getAllTasks(user.id)
       setTasks(tasksData)
     } catch (error) {
-      console.error('Error loading data:', error)
+      console.error('Error loading tasks:', error)
+    }
+  }, [user.id])
+
+  const loadData = useCallback(async () => {
+    try {
+      await Promise.all([loadEvents(), loadTasks()])
     } finally {
       setIsInitialLoading(false)
     }
-  }, [user.id, selectedDate])
+  }, [loadEvents, loadTasks])
 
   useEffect(() => {
     loadData()
@@ -213,7 +224,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
   const handleAddTask = async (title: string) => {
     try {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd')
+      const dateStr = format(new Date(), 'yyyy-MM-dd')
       const newTask = await createTask({ user_id: user.id, title, is_completed: false, target_date: dateStr })
       setTasks([newTask, ...tasks])
     } catch (error) {

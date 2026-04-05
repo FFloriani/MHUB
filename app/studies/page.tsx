@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Plus, BookOpen, Trophy } from 'lucide-react'
+import { Plus, BookOpen, Trophy, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/lib/supabase'
 import { ActivityCalendar } from 'react-activity-calendar'
@@ -34,6 +34,33 @@ export default function StudiesPage() {
             console.error('Erro ao buscar matérias:', error)
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const handleDeleteSubject = async (e: React.MouseEvent, subjectId: string, subjectName: string) => {
+        e.stopPropagation() // Evita navegar para a página da matéria
+
+        if (!confirm(`Deletar a matéria "${subjectName}"?\n\nIsso também vai deletar todos os tópicos e sessões de estudo associados.`)) {
+            return
+        }
+
+        try {
+            // Deletar tópicos associados primeiro
+            await supabase.from('study_topics').delete().eq('subject_id', subjectId)
+
+            // Deletar a matéria (sessions são CASCADE ou SET NULL)
+            const { error } = await supabase
+                .from('subjects')
+                .delete()
+                .eq('id', subjectId)
+
+            if (error) throw error
+
+            // Atualizar lista local
+            setSubjects(prev => prev.filter(s => s.id !== subjectId))
+        } catch (error: any) {
+            console.error('Erro ao deletar matéria:', error)
+            alert(`Erro ao deletar: ${error?.message || 'Erro desconhecido'}`)
         }
     }
 
@@ -83,8 +110,17 @@ export default function StudiesPage() {
                         animate={{ opacity: 1, scale: 1 }}
                         whileHover={{ scale: 1.03 }}
                         whileTap={{ scale: 0.98 }}
-                        className={`aspect-video rounded-3xl p-6 relative overflow-hidden bg-gradient-to-br ${subject.color || 'from-gray-100 to-gray-200'} text-white shadow-lg cursor-pointer hover:shadow-xl transition-all`}
+                        className={`aspect-video rounded-3xl p-6 relative overflow-hidden bg-gradient-to-br ${subject.color || 'from-gray-100 to-gray-200'} text-white shadow-lg cursor-pointer hover:shadow-xl transition-all group`}
                     >
+                        {/* Botão Deletar */}
+                        <button
+                            onClick={(e) => handleDeleteSubject(e, subject.id, subject.name)}
+                            className="absolute top-3 right-3 z-20 p-2 bg-black/20 hover:bg-red-500 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-200"
+                            title="Deletar matéria"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+
                         <div className="relative z-10 flex flex-col h-full justify-between">
                             <div>
                                 <h3 className="text-xl font-bold">{subject.name}</h3>

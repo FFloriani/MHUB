@@ -12,7 +12,8 @@ import {
     ChevronRight,
     User,
     X,
-    BookOpen
+    BookOpen,
+    Dumbbell
 } from 'lucide-react'
 import { signOut } from '@/lib/auth'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -51,6 +52,7 @@ export default function Sidebar({ isOpen, setIsOpen, isExpanded, setIsExpanded, 
         { name: 'Agenda', icon: Calendar, path: '/' },
         { name: 'Financeiro', icon: DollarSign, path: '/financial' },
         { name: 'Estudos', icon: BookOpen, path: '/studies' },
+        { name: 'Treino', icon: Dumbbell, path: '/workout' },
         { name: 'Configurações', icon: Settings, path: '/settings' },
     ]
 

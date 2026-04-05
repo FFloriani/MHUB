@@ -5,18 +5,42 @@ type Task = Database['public']['Tables']['tasks']['Row']
 type TaskInsert = Database['public']['Tables']['tasks']['Insert']
 type TaskUpdate = Database['public']['Tables']['tasks']['Update']
 
-export async function getTasksByDate(userId: string, date: Date) {
-  const dateStr = date.toISOString().split('T')[0]
-  
-  const { data, error } = await supabase
+/**
+ * Busca TODAS as tarefas do usuário:
+ * - Todas as pendentes (independente de data)
+ * - Concluídas nos últimos 7 dias (para dar tempo de ver/desmarcar)
+ */
+export async function getAllTasks(userId: string) {
+  // 1. Todas as pendentes
+  const { data: pending, error: pendingError } = await supabase
     .from('tasks')
     .select('*')
     .eq('user_id', userId)
-    .eq('target_date', dateStr)
-    .order('is_completed', { ascending: true })
-  
-  if (error) throw error
-  return data as Task[]
+    .eq('is_completed', false)
+    .order('created_at', { ascending: false })
+
+  if (pendingError) throw pendingError
+
+  // 2. Concluídas recentemente (últimos 7 dias)
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+  const { data: completed, error: completedError } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_completed', true)
+    .gte('target_date', sevenDaysAgo.toISOString().split('T')[0])
+    .order('target_date', { ascending: false })
+
+  if (completedError) throw completedError
+
+  return [...(pending || []), ...(completed || [])] as Task[]
+}
+
+/** @deprecated Use getAllTasks instead */
+export async function getTasksByDate(userId: string, date: Date) {
+  return getAllTasks(userId)
 }
 
 export async function createTask(task: TaskInsert) {

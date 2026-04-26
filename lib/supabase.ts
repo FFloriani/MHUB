@@ -98,94 +98,293 @@ export type Database = {
           notification_minutes_before?: number
         }
       }
-      revenues: {
+      finance_categories: {
         Row: {
           id: string
           user_id: string
-          category: string
-          amount: number
-          month: number
-          year: number
+          name: string
+          kind: 'expense' | 'income' | 'investment'
+          icon: string
+          color: string
+          is_archived: boolean
+          sort_order: number
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
-          category: string
-          amount: number
-          month: number
-          year: number
+          name: string
+          kind: 'expense' | 'income' | 'investment'
+          icon?: string
+          color?: string
+          is_archived?: boolean
+          sort_order?: number
         }
         Update: {
           id?: string
           user_id?: string
-          category?: string
-          amount?: number
-          month?: number
-          year?: number
+          name?: string
+          kind?: 'expense' | 'income' | 'investment'
+          icon?: string
+          color?: string
+          is_archived?: boolean
+          sort_order?: number
         }
       }
-      investments: {
+      finance_transactions: {
         Row: {
           id: string
           user_id: string
-          category: string
+          kind: 'expense' | 'income' | 'investment'
+          category_id: string | null
+          title: string
           amount: number
-          month: number
-          year: number
+          occurred_on: string
+          payment_method: string | null
+          notes: string | null
+          tags: string[]
+          recurring_id: string | null
+          installment_id: string | null
+          installment_index: number | null
+          paid: boolean
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
-          category: string
+          kind: 'expense' | 'income' | 'investment'
+          category_id?: string | null
+          title: string
           amount: number
-          month: number
-          year: number
+          occurred_on: string
+          payment_method?: string | null
+          notes?: string | null
+          tags?: string[]
+          recurring_id?: string | null
+          installment_id?: string | null
+          installment_index?: number | null
+          paid?: boolean
         }
         Update: {
           id?: string
           user_id?: string
-          category?: string
+          kind?: 'expense' | 'income' | 'investment'
+          category_id?: string | null
+          title?: string
           amount?: number
-          month?: number
-          year?: number
+          occurred_on?: string
+          payment_method?: string | null
+          notes?: string | null
+          tags?: string[]
+          recurring_id?: string | null
+          installment_id?: string | null
+          installment_index?: number | null
+          paid?: boolean
         }
       }
-      expenses: {
+      finance_recurring: {
         Row: {
           id: string
           user_id: string
-          type: string
-          category: string
-          item: string
+          category_id: string | null
+          kind: 'expense' | 'income' | 'investment'
+          title: string
           amount: number
-          month: number
-          year: number
+          day_of_month: number
+          start_date: string
+          end_date: string | null
+          payment_method: string | null
+          notes: string | null
+          active: boolean
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
-          type: string
-          category: string
-          item: string
+          category_id?: string | null
+          kind: 'expense' | 'income' | 'investment'
+          title: string
           amount: number
-          month: number
-          year: number
+          day_of_month: number
+          start_date: string
+          end_date?: string | null
+          payment_method?: string | null
+          notes?: string | null
+          active?: boolean
         }
         Update: {
           id?: string
           user_id?: string
-          type?: string
-          category?: string
-          item?: string
+          category_id?: string | null
+          kind?: 'expense' | 'income' | 'investment'
+          title?: string
           amount?: number
-          month?: number
-          year?: number
+          day_of_month?: number
+          start_date?: string
+          end_date?: string | null
+          payment_method?: string | null
+          notes?: string | null
+          active?: boolean
+        }
+      }
+      finance_installments: {
+        Row: {
+          id: string
+          user_id: string
+          category_id: string | null
+          title: string
+          total_amount: number
+          total_count: number
+          first_due: string
+          payment_method: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          category_id?: string | null
+          title: string
+          total_amount: number
+          total_count: number
+          first_due: string
+          payment_method?: string | null
+          notes?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          category_id?: string | null
+          title?: string
+          total_amount?: number
+          total_count?: number
+          first_due?: string
+          payment_method?: string | null
+          notes?: string | null
+        }
+      }
+      finance_budgets: {
+        Row: {
+          id: string
+          user_id: string
+          category_id: string
+          monthly_limit: number
+          alert_threshold: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          category_id: string
+          monthly_limit: number
+          alert_threshold?: number
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          category_id?: string
+          monthly_limit?: number
+          alert_threshold?: number
+        }
+      }
+      finance_loans: {
+        Row: {
+          id: string
+          user_id: string
+          counterpart_name: string
+          direction: 'lent' | 'borrowed'
+          principal: number
+          taken_on: string
+          due_date: string | null
+          status: 'open' | 'partial' | 'paid'
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          counterpart_name: string
+          direction: 'lent' | 'borrowed'
+          principal: number
+          taken_on: string
+          due_date?: string | null
+          status?: 'open' | 'partial' | 'paid'
+          notes?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          counterpart_name?: string
+          direction?: 'lent' | 'borrowed'
+          principal?: number
+          taken_on?: string
+          due_date?: string | null
+          status?: 'open' | 'partial' | 'paid'
+          notes?: string | null
+        }
+      }
+      finance_loan_payments: {
+        Row: {
+          id: string
+          loan_id: string
+          user_id: string
+          amount: number
+          paid_on: string
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          loan_id: string
+          user_id: string
+          amount: number
+          paid_on: string
+          notes?: string | null
+        }
+        Update: {
+          id?: string
+          loan_id?: string
+          user_id?: string
+          amount?: number
+          paid_on?: string
+          notes?: string | null
+        }
+      }
+      finance_attachments: {
+        Row: {
+          id: string
+          transaction_id: string
+          user_id: string
+          storage_path: string
+          file_name: string
+          mime_type: string | null
+          size_bytes: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          transaction_id: string
+          user_id: string
+          storage_path: string
+          file_name: string
+          mime_type?: string | null
+          size_bytes?: number | null
+        }
+        Update: {
+          id?: string
+          transaction_id?: string
+          user_id?: string
+          storage_path?: string
+          file_name?: string
+          mime_type?: string | null
+          size_bytes?: number | null
         }
       }
       subjects: {

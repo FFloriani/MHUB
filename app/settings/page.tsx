@@ -28,7 +28,7 @@ export default function SettingsPage() {
   const [importPreview, setImportPreview] = useState<{
     eventos: number
     tarefas: number
-    financeiro: { receitas: number; despesas: number; investimentos: number } | null
+    financeiro: { transacoes: number; recorrentes: number; emprestimos: number } | null
     estudos: number
   } | null>(null)
   const [pendingImportData, setPendingImportData] = useState<SimpleBackupData | null>(null)
@@ -495,7 +495,7 @@ export default function SettingsPage() {
                   <div className={`flex items-center gap-2 ${importPreview.financeiro ? 'text-emerald-600' : 'text-gray-400'}`}>
                     {importPreview.financeiro ? <Check className="w-4 h-4" /> : <span className="w-4 h-4">✗</span>}
                     {importPreview.financeiro
-                      ? `${importPreview.financeiro.receitas + importPreview.financeiro.despesas + importPreview.financeiro.investimentos} Financeiro`
+                      ? `${importPreview.financeiro.transacoes + importPreview.financeiro.recorrentes + importPreview.financeiro.emprestimos} Financeiro`
                       : 'Financeiro'
                     }
                   </div>

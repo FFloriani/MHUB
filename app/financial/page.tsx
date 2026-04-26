@@ -3,8 +3,8 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/AuthProvider'
-import FinancialDashboard from '@/components/financial/FinancialDashboard'
-import type { User } from '@supabase/supabase-js'
+import { FinanceProvider } from '@/components/finance/FinanceContext'
+import FinanceShell from '@/components/finance/FinanceShell'
 
 export default function FinancialPage() {
   const router = useRouter()
@@ -24,14 +24,13 @@ export default function FinancialPage() {
     )
   }
 
-  if (!user) {
-    return null
-  }
+  if (!user) return null
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <FinancialDashboard user={user} />
+      <FinanceProvider user={user}>
+        <FinanceShell />
+      </FinanceProvider>
     </div>
   )
 }
-

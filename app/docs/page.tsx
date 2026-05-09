@@ -9,8 +9,8 @@ export default function DocsHomePage() {
         MHUB — guias e API
       </h1>
       <p className="text-lg text-slate-600 leading-relaxed mb-12">
-        Central oficial de ajuda: como automatizar sua agenda, finanças e treino com assistentes de IA e
-        integrações HTTP, sem depender de arquivos soltos no GitHub.
+        Central oficial: automatizar agenda, finanças e treino com IAs e scripts HTTP — referência completa aqui no site,
+        alinhada ao que a API implementa hoje.
       </p>
 
       <div className="grid gap-4 sm:gap-6">
@@ -53,10 +53,6 @@ export default function DocsHomePage() {
         </Link>
       </div>
 
-      <p className="mt-12 text-sm text-slate-500 border-t border-slate-200 pt-8">
-        Desenvolvedores que clonam o repositório também encontram o espelho em{' '}
-        <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">MHUB_API.md</code> na raiz do projeto.
-      </p>
     </div>
   )
 }

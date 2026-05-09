@@ -151,20 +151,11 @@ export default function ApiKeysSettings() {
         <code className="bg-gray-100 px-1 rounded text-xs">/api/v1/*</code>.
       </p>
       <p className="text-sm text-gray-600 mb-4">
-        Referência completa no MHUB:{' '}
+        Referência completa:{' '}
         <Link href="/docs/api" className="text-indigo-600 underline font-medium">
           documentação da API REST
-        </Link>
-        . Espelho em Markdown no GitHub:{' '}
-        <a
-          href="https://github.com/FFloriani/MHUB/blob/main/MHUB_API.md"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-indigo-600 underline font-medium"
-        >
-          MHUB_API.md
-        </a>
-        .
+        </Link>{' '}
+        (rotas, escopos, corpos JSON e exemplos).
       </p>
 
       {revealedOnce ? (

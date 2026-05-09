@@ -65,20 +65,26 @@ Regras:
 - Respostas de sucesso são JSON. Erros: { "error": "mensagem" }.
 - 401 = token inválido ou ausente. 403 = minha chave não tem permissão (escopo) para essa rota. 503 = a API não está disponível no servidor (configuração do deploy).
 
-Endpoints principais:
-GET  /api/v1/me — testar token (retorna user_id e scopes)
-GET  /api/v1/events?date=AAAA-MM-DD — eventos do dia
-POST /api/v1/events — JSON: title, start_time (ISO); opcional: end_time, description, is_recurring, recurrence_days (0-6), recurrence_end_date
-PATCH /DELETE /api/v1/events/:id
-GET  /api/v1/tasks | POST /api/v1/tasks (title; opcional target_date, is_completed) | PATCH/DELETE /api/v1/tasks/:id
-GET  /api/v1/finance/categories | POST /api/v1/finance/categories
-GET  /api/v1/finance/transactions?year=ANO&month=MES ou ?from=&to=
-POST /api/v1/finance/transactions — title, kind (expense|income|investment), amount, occurred_on
-PATCH/DELETE /api/v1/finance/categories/:id e /finance/transactions/:id
-GET  /api/v1/workout — plano ativo
-PATCH /api/v1/workout/exercises/:id — campos do exercício
-GET /api/v1/settings | PATCH /api/v1/settings — preferências de notificação
-GET /api/v1/diet — ainda não implementado (501)
+Endpoints (API v1 — alinhado à documentação em /docs/api):
+GET  /api/v1/me — user_id, scopes, links /docs
+GET  /api/v1/events?date=AAAA-MM-DD — { date, events }; date opcional (default hoje)
+POST /api/v1/events — title, start_time (ISO); opcional: end_time, description, is_recurring, recurrence_days (0-6), recurrence_end_date
+PATCH e DELETE /api/v1/events/:id
+GET  /api/v1/tasks — { tasks }: pendentes + concluídas dos últimos 7 dias
+POST /api/v1/tasks — title; opcional: is_completed, target_date
+PATCH e DELETE /api/v1/tasks/:id
+GET  /api/v1/finance/categories — { categories }
+POST /api/v1/finance/categories — name, kind; opcional: icon, color, is_archived, sort_order
+PATCH e DELETE /api/v1/finance/categories/:id
+GET  /api/v1/finance/transactions — year+month ou from+to; opcional kind= expense|income|investment|all; sem datas: até 500
+POST /api/v1/finance/transactions — title, kind, amount, occurred_on; opcional: category_id, payment_method, notes, tags, paid
+PATCH e DELETE /api/v1/finance/transactions/:id
+GET  /api/v1/workout — plano ativo + days + exercises
+PATCH /api/v1/workout/exercises/:id — só edição (não cria plano pela API)
+GET /api/v1/settings | PATCH /api/v1/settings
+GET /api/v1/diet — 501
+
+Detalhes: ${baseUrl}/docs/api
 
 Quando eu pedir algo, responda com comandos curl prontos usando $MHUB_URL="${baseUrl}" e $MHUB_TOKEN assumindo que eu exportei a variável no terminal, ou com fetch em JavaScript.`,
     [baseUrl],

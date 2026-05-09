@@ -273,7 +273,7 @@ export default function SettingsPage() {
                 <h2 className="text-lg font-semibold text-gray-900">Guia da API (automação e IA)</h2>
                 <p className="text-sm text-gray-600 mt-1.5 leading-relaxed max-w-xl">
                   Página só do MHUB com passo a passo em português: criar chave, URL certa, texto pronto para colar no
-                  ChatGPT / Claude / Cursor e teste no terminal. Não precisa abrir GitHub.
+                  ChatGPT / Claude / Cursor e teste no terminal — tudo no próprio MHUB.
                 </p>
               </div>
             </div>

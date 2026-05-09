@@ -21,7 +21,5 @@ export async function GET(request: Request) {
     docs_home: '/docs',
     guide_url: '/docs/guia-ia',
     api_reference_url: '/docs/api',
-    /** Espelho em Markdown na raiz do repositório (quem clona o projeto) */
-    docs: '/MHUB_API.md',
   })
 }

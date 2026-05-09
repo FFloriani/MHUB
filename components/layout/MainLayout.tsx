@@ -7,10 +7,11 @@ import { cn } from '@/lib/utils'
 
 import { useAuth } from '@/components/providers/AuthProvider'
 
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
     const { user } = useAuth()
+    const pathname = usePathname()
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [isExpanded, setIsExpanded] = useState(true)
     const [isMobile, setIsMobile] = useState(false)
@@ -30,6 +31,16 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
     if (!user || isPopupMode) {
         return <main className="min-h-screen bg-gray-50">{children}</main>
+    }
+
+    const isDocs = pathname.startsWith('/docs')
+
+    if (isDocs) {
+        return (
+            <div className="min-h-screen bg-slate-50 w-full max-w-full overflow-x-hidden">
+                {children}
+            </div>
+        )
     }
 
     return (

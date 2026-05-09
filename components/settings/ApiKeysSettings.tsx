@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Key, Loader2, Plus, Copy, Ban, AlertTriangle, BookOpen } from 'lucide-react'
+import { Key, Loader2, Plus, Copy, Ban, BookOpen } from 'lucide-react'
 import Link from 'next/link'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
@@ -138,7 +138,7 @@ export default function ApiKeysSettings() {
           </div>
         </div>
         <Link
-          href="/api-docs"
+          href="/docs/guia-ia"
           className="inline-flex items-center justify-center rounded-lg font-medium transition-colors px-4 py-2 text-base bg-primary text-white hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary w-full sm:w-auto whitespace-nowrap"
         >
           Abrir guia no site
@@ -151,29 +151,21 @@ export default function ApiKeysSettings() {
         <code className="bg-gray-100 px-1 rounded text-xs">/api/v1/*</code>.
       </p>
       <p className="text-sm text-gray-600 mb-4">
-        Referência técnica extra (opcional):{' '}
+        Referência completa no MHUB:{' '}
+        <Link href="/docs/api" className="text-indigo-600 underline font-medium">
+          documentação da API REST
+        </Link>
+        . Espelho em Markdown no GitHub:{' '}
         <a
           href="https://github.com/FFloriani/MHUB/blob/main/MHUB_API.md"
           target="_blank"
           rel="noopener noreferrer"
           className="text-indigo-600 underline font-medium"
         >
-          MHUB_API.md no GitHub
+          MHUB_API.md
         </a>
         .
       </p>
-
-      <div className="rounded-xl bg-amber-50 border border-amber-100 p-4 flex gap-2 text-sm text-amber-900 mb-6">
-        <AlertTriangle className="w-5 h-5 shrink-0" />
-        <div>
-          <p className="font-medium">Requisito no servidor</p>
-          <p className="text-amber-800/90 mt-1">
-            A validação do token usa a chave <strong>service role</strong> do Supabase. Configure{' '}
-            <code className="text-xs bg-white/80 px-1 rounded">SUPABASE_SERVICE_ROLE_KEY</code> no
-            Vercel / .env.local (nunca exponha no cliente).
-          </p>
-        </div>
-      </div>
 
       {revealedOnce ? (
         <div className="mb-6 p-4 bg-gray-900 text-green-400 rounded-xl font-mono text-xs break-all space-y-2">

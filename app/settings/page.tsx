@@ -279,7 +279,7 @@ export default function SettingsPage() {
             </div>
             <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0">
               <Link
-                href="/api-docs"
+                href="/docs"
                 className="inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors text-center"
               >
                 Abrir documentação no site

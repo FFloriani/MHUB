@@ -419,11 +419,41 @@ export default function ApiReferencePage() {
       </section>
 
       <section id="diet" className="mb-14 scroll-mt-20">
-        <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4">Dieta (reservado)</h2>
+        <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4">Dieta</h2>
+        <p className="text-slate-600 text-sm mb-4">
+          Registro de itens por dia e refeição (<code className="bg-slate-100 px-1 rounded">diet_entries</code>).
+          Tipos de refeição: <code className="bg-slate-100 px-1 rounded">breakfast</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">lunch</code>, <code className="bg-slate-100 px-1 rounded">snack</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">dinner</code>, <code className="bg-slate-100 px-1 rounded">other</code>.
+        </p>
+        <Table
+          headers={['Método', 'Rota', 'Escopo']}
+          rows={[
+            ['GET', '/api/v1/diet?date=YYYY-MM-DD', 'diet:read'],
+            ['POST', '/api/v1/diet', 'diet:write'],
+            ['PATCH', '/api/v1/diet/:id', 'diet:write'],
+            ['DELETE', '/api/v1/diet/:id', 'diet:write'],
+          ]}
+        />
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>GET</strong> — query <code className="bg-slate-100 px-1 rounded">date</code> opcional (default: hoje no servidor).
+          Resposta: <code className="bg-slate-100 px-1 rounded text-xs">{`{ "date": "YYYY-MM-DD", "entries": [ … ] }`}</code> com itens
+          ordenados por refeição (café → almoço → lanche → jantar → outro), depois <code className="bg-slate-100 px-1 rounded">sort_order</code> e
+          criação.
+        </p>
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>POST</strong> — obrigatórios: <code className="bg-slate-100 px-1 rounded">name</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">meal_type</code>. Opcionais:{' '}
+          <code className="bg-slate-100 px-1 rounded">logged_date</code> (default hoje),{' '}
+          <code className="bg-slate-100 px-1 rounded">quantity_text</code>, <code className="bg-slate-100 px-1 rounded">calories</code> (inteiro),{' '}
+          <code className="bg-slate-100 px-1 rounded">protein_g</code>, <code className="bg-slate-100 px-1 rounded">carbs_g</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">fat_g</code>, <code className="bg-slate-100 px-1 rounded">notes</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">sort_order</code>.
+        </p>
         <p className="text-slate-600 text-sm">
-          <code className="bg-slate-100 px-1 rounded">GET /api/v1/diet</code> exige escopo{' '}
-          <code className="bg-slate-100 px-1 rounded">diet:read</code>. Hoje responde <strong>501</strong> com mensagem
-          informando que o módulo ainda não está disponível na API.
+          <strong>PATCH / DELETE</strong> — <code className="bg-slate-100 px-1 rounded">PATCH</code> com qualquer subconjunto dos campos acima;
+          corpo vazio → <strong>400</strong>. <code className="bg-slate-100 px-1 rounded">DELETE</code> retorna{' '}
+          <code className="bg-slate-100 px-1 rounded text-xs">{`{ "deleted": true, "id": "…" }`}</code>.
         </p>
       </section>
 
@@ -438,7 +468,6 @@ export default function ApiReferencePage() {
             ['403', 'Token válido mas sem o escopo da rota (ver campo scope quando enviado)'],
             ['404', 'Recurso inexistente ou de outro usuário'],
             ['500', 'Erro interno não tratado (mensagem no body)'],
-            ['501', 'Recurso reservado (dieta)'],
             ['503', 'Servidor sem service role / Supabase admin (configuração de deploy)'],
           ]}
         />

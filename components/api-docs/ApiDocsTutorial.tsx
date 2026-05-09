@@ -82,7 +82,7 @@ PATCH e DELETE /api/v1/finance/transactions/:id
 GET  /api/v1/workout — plano ativo + days + exercises
 PATCH /api/v1/workout/exercises/:id — só edição (não cria plano pela API)
 GET /api/v1/settings | PATCH /api/v1/settings
-GET /api/v1/diet — 501
+GET /api/v1/diet?date=… | POST /api/v1/diet | PATCH/DELETE /api/v1/diet/:id
 
 Detalhes: ${baseUrl}/docs/api
 

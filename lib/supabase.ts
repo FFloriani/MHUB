@@ -562,6 +562,52 @@ export type Database = {
           created_at?: string
         }
       }
+      diet_entries: {
+        Row: {
+          id: string
+          user_id: string
+          logged_date: string
+          meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other'
+          name: string
+          quantity_text: string | null
+          calories: number | null
+          protein_g: number | null
+          carbs_g: number | null
+          fat_g: number | null
+          notes: string | null
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          logged_date: string
+          meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other'
+          name: string
+          quantity_text?: string | null
+          calories?: number | null
+          protein_g?: number | null
+          carbs_g?: number | null
+          fat_g?: number | null
+          notes?: string | null
+          sort_order?: number
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          logged_date?: string
+          meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other'
+          name?: string
+          quantity_text?: string | null
+          calories?: number | null
+          protein_g?: number | null
+          carbs_g?: number | null
+          fat_g?: number | null
+          notes?: string | null
+          sort_order?: number
+        }
+      }
       subjects: {
         Row: {
           id: string

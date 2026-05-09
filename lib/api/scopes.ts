@@ -18,9 +18,9 @@ export const API_SCOPES = [
   { id: 'settings:*', label: 'Preferências (completo)', description: 'Configurações da conta no app.' },
   { id: 'settings:read', label: 'Preferências — leitura', description: 'Ler notificações e preferências.' },
   { id: 'settings:write', label: 'Preferências — escrita', description: 'Atualizar notificações e preferências.' },
-  { id: 'diet:*', label: 'Dieta (completo)', description: 'Reservado para o módulo de dieta.' },
-  { id: 'diet:read', label: 'Dieta — leitura', description: 'Reservado.' },
-  { id: 'diet:write', label: 'Dieta — escrita', description: 'Reservado.' },
+  { id: 'diet:*', label: 'Dieta (completo)', description: 'Ler e registrar refeições pela API.' },
+  { id: 'diet:read', label: 'Dieta — leitura', description: 'GET /api/v1/diet (por data).' },
+  { id: 'diet:write', label: 'Dieta — escrita', description: 'POST/PATCH/DELETE em entradas de dieta.' },
 ] as const
 
 export type ApiScopeId = (typeof API_SCOPES)[number]['id']

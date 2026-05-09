@@ -14,6 +14,7 @@ import {
     X,
     BookOpen,
     Dumbbell,
+    UtensilsCrossed,
     Library,
 } from 'lucide-react'
 import { signOut } from '@/lib/auth'
@@ -54,6 +55,7 @@ export default function Sidebar({ isOpen, setIsOpen, isExpanded, setIsExpanded, 
         { name: 'Financeiro', icon: DollarSign, path: '/financial' },
         { name: 'Estudos', icon: BookOpen, path: '/studies' },
         { name: 'Treino', icon: Dumbbell, path: '/workout' },
+        { name: 'Dieta', icon: UtensilsCrossed, path: '/diet' },
         { name: 'Documentação', icon: Library, path: '/docs' },
         { name: 'Configurações', icon: Settings, path: '/settings' },
     ]

@@ -14,6 +14,7 @@ type FinanceInstallment = Tables['finance_installments']['Row']
 type FinanceBudget = Tables['finance_budgets']['Row']
 type FinanceLoan = Tables['finance_loans']['Row']
 type FinanceLoanPayment = Tables['finance_loan_payments']['Row']
+type DietEntry = Tables['diet_entries']['Row']
 
 export interface BackupData {
     version: number
@@ -30,6 +31,8 @@ export interface BackupData {
         financeBudgets: FinanceBudget[]
         financeLoans: FinanceLoan[]
         financeLoanPayments: FinanceLoanPayment[]
+        /** Presente a partir do módulo Dieta (backup v2+). */
+        dietEntries?: DietEntry[]
     }
 }
 
@@ -81,6 +84,14 @@ export async function exportFullBackup(userId: string): Promise<BackupData> {
         if (r.error) throw new Error('Falha ao exportar dados financeiros: ' + r.error.message)
     }
 
+    const { data: dietEntries, error: dietError } = await supabase
+        .from('diet_entries')
+        .select('*')
+        .eq('user_id', userId)
+        .order('logged_date', { ascending: true })
+
+    if (dietError) throw new Error('Falha ao exportar dieta: ' + dietError.message)
+
     return {
         version: 2,
         timestap: new Date().toISOString(),
@@ -96,6 +107,7 @@ export async function exportFullBackup(userId: string): Promise<BackupData> {
             financeBudgets: budgetsRes.data || [],
             financeLoans: loansRes.data || [],
             financeLoanPayments: loanPaymentsRes.data || [],
+            dietEntries: dietEntries || [],
         },
     }
 }
@@ -116,6 +128,8 @@ export async function restoreFullBackup(userId: string, backup: BackupData): Pro
     await supabase.from('finance_installments').delete().eq('user_id', userId)
     await supabase.from('finance_recurring').delete().eq('user_id', userId)
     await supabase.from('finance_categories').delete().eq('user_id', userId)
+
+    await supabase.from('diet_entries').delete().eq('user_id', userId)
 
     await supabase.from('tasks').delete().eq('user_id', userId)
     await supabase.from('events').delete().eq('user_id', userId)
@@ -139,6 +153,11 @@ export async function restoreFullBackup(userId: string, backup: BackupData): Pro
     if (backup.data.tasks?.length) {
         const { error } = await supabase.from('tasks').insert(sanitize(backup.data.tasks))
         if (error) throw new Error('Erro ao restaurar tarefas: ' + error.message)
+    }
+
+    if (backup.data.dietEntries?.length) {
+        const { error } = await supabase.from('diet_entries').insert(sanitize(backup.data.dietEntries))
+        if (error) throw new Error('Erro ao restaurar dieta: ' + error.message)
     }
 
     if (backup.data.financeCategories?.length) {

@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { addDays, startOfWeek } from 'date-fns'
 import {
   Apple,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Loader2,
   Pencil,
   Plus,
@@ -20,8 +22,10 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import {
   MEAL_LABELS,
   MEAL_ORDER,
+  copyDietEntriesFromDate,
   createDietEntry,
   deleteDietEntry,
+  fetchDietEntryCountsInRange,
   listDietEntries,
   summarizeDay,
   updateDietEntry,
@@ -29,8 +33,19 @@ import {
   type DietMealType,
   ymd,
 } from '@/lib/data/diet'
+import { cn } from '@/lib/utils'
 
-function addDays(iso: string, delta: number): string {
+/** Domingo primeiro — igual ao componente de calendário do MHUB. */
+const WEEK_STARTS_ON = 0 as const
+
+const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+function localDateFromIso(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function addDaysIso(iso: string, delta: number): string {
   const [y, m, d] = iso.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
   dt.setDate(dt.getDate() + delta)
@@ -38,9 +53,8 @@ function addDays(iso: string, delta: number): string {
 }
 
 function formatDisplayDate(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number)
-  const dt = new Date(y, m - 1, d)
-  return dt.toLocaleDateString('pt-BR', {
+  const d = localDateFromIso(iso)
+  return d.toLocaleDateString('pt-BR', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -69,20 +83,46 @@ export default function DietPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<DietEntry | null>(null)
   const [form, setForm] = useState(emptyForm)
+  const [weekCounts, setWeekCounts] = useState<Record<string, number>>({})
 
   const load = useCallback(async () => {
     if (!user) return
     setLoading(true)
     try {
-      const list = await listDietEntries(user.id, date)
+      const selected = localDateFromIso(date)
+      const weekStart = startOfWeek(selected, { weekStartsOn: WEEK_STARTS_ON })
+      const from = ymd(weekStart)
+      const to = ymd(addDays(weekStart, 6))
+
+      const [list, counts] = await Promise.all([
+        listDietEntries(user.id, date),
+        fetchDietEntryCountsInRange(user.id, from, to),
+      ])
       setEntries(list)
+      setWeekCounts(counts)
     } catch (e) {
       console.error(e)
       setEntries([])
+      setWeekCounts({})
     } finally {
       setLoading(false)
     }
   }, [user, date])
+
+  const weekDays = useMemo(() => {
+    const selected = localDateFromIso(date)
+    const weekStart = startOfWeek(selected, { weekStartsOn: WEEK_STARTS_ON })
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = addDays(weekStart, i)
+      const iso = ymd(d)
+      return {
+        iso,
+        label: WEEKDAY_LABELS[i],
+        dayNum: d.getDate(),
+        count: weekCounts[iso] ?? 0,
+      }
+    })
+  }, [date, weekCounts])
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/')
@@ -180,6 +220,28 @@ export default function DietPage() {
     }
   }
 
+  async function handleRepeatYesterday() {
+    if (!user) return
+    const yesterday = addDaysIso(date, -1)
+    let msg = `Copiar todos os itens de ${formatDisplayDate(yesterday)} para ${formatDisplayDate(date)}?`
+    if (entries.length > 0) {
+      msg =
+        'Este dia já tem registros. Os itens de ontem serão adicionados junto (nada será apagado). Continuar?'
+    }
+    if (!confirm(msg)) return
+    try {
+      const n = await copyDietEntriesFromDate(user.id, yesterday, date)
+      if (n === 0) {
+        alert('Ontem não tinha nenhum item para copiar.')
+        return
+      }
+      await load()
+    } catch (err) {
+      console.error(err)
+      alert('Não foi possível copiar. Verifique a conexão e a migração do Supabase.')
+    }
+  }
+
   if (authLoading) {
     return (
       <MainLayout>
@@ -203,44 +265,115 @@ export default function DietPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Dieta</h1>
-              <p className="text-sm text-gray-500">Registro do dia — refeições e macros (opcionais)</p>
+              <p className="text-sm text-gray-500">
+                Cada dia fica salvo na sua conta (Supabase). Escolha o dia na semana — como na agenda.
+              </p>
             </div>
           </div>
         </header>
 
-        <Card className="p-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+        <Card className="p-4 mb-6 space-y-4">
           <div className="flex items-center gap-2">
             <Button
               type="button"
               variant="secondary"
               size="sm"
-              className="p-2"
-              onClick={() => setDate((d) => addDays(d, -1))}
-              aria-label="Dia anterior"
+              className="p-2 shrink-0"
+              onClick={() => setDate((d) => addDaysIso(d, -7))}
+              aria-label="Semana anterior"
+              title="Semana anterior"
             >
               <ChevronLeft className="w-5 h-5" />
             </Button>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 bg-white"
-            />
+            <div className="flex-1 grid grid-cols-7 gap-1 min-w-0">
+              {weekDays.map((day) => {
+                const isSelected = day.iso === date
+                const isToday = day.iso === ymd(new Date())
+                return (
+                  <button
+                    key={day.iso}
+                    type="button"
+                    onClick={() => setDate(day.iso)}
+                    className={cn(
+                      'flex flex-col items-center rounded-xl py-2 px-0.5 transition-all border',
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-50 shadow-sm ring-1 ring-emerald-500/30'
+                        : 'border-transparent bg-gray-50/80 hover:bg-gray-100',
+                      isToday && !isSelected && 'ring-1 ring-amber-300 ring-inset',
+                    )}
+                  >
+                    <span className="text-[10px] font-semibold text-gray-500 uppercase">{day.label}</span>
+                    <span className="text-base font-bold text-gray-900">{day.dayNum}</span>
+                    {day.count > 0 ? (
+                      <span
+                        className="mt-1 w-2 h-2 rounded-full bg-emerald-500"
+                        title={`${day.count} item(ns)`}
+                        aria-label={`${day.count} registros`}
+                      />
+                    ) : (
+                      <span className="h-2 mt-1" aria-hidden />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
             <Button
               type="button"
               variant="secondary"
               size="sm"
-              className="p-2"
-              onClick={() => setDate((d) => addDays(d, 1))}
-              aria-label="Próximo dia"
+              className="p-2 shrink-0"
+              onClick={() => setDate((d) => addDaysIso(d, 7))}
+              aria-label="Próxima semana"
+              title="Próxima semana"
             >
               <ChevronRight className="w-5 h-5" />
             </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setDate(ymd(new Date()))}>
-              Hoje
-            </Button>
           </div>
-          <p className="text-sm text-gray-600 capitalize sm:text-right">{formatDisplayDate(date)}</p>
+
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 pt-1 border-t border-gray-100">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="p-2"
+                onClick={() => setDate((d) => addDaysIso(d, -1))}
+                aria-label="Dia anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 bg-white"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="p-2"
+                onClick={() => setDate((d) => addDaysIso(d, 1))}
+                aria-label="Próximo dia"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setDate(ymd(new Date()))}>
+                Hoje
+              </Button>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="inline-flex items-center gap-2 w-fit"
+              onClick={() => void handleRepeatYesterday()}
+            >
+              <Copy className="w-4 h-4" />
+              Repetir ontem
+            </Button>
+            <p className="text-sm text-gray-600 capitalize sm:ml-auto">{formatDisplayDate(date)}</p>
+          </div>
         </Card>
 
         {hasMacros ? (

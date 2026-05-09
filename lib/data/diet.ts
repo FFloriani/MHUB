@@ -38,6 +38,56 @@ export function sortDietEntries(entries: DietEntry[]): DietEntry[] {
   })
 }
 
+export async function fetchDietEntryCountsInRange(
+  userId: string,
+  from: string,
+  to: string,
+): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from('diet_entries')
+    .select('logged_date')
+    .eq('user_id', userId)
+    .gte('logged_date', from)
+    .lte('logged_date', to)
+
+  if (error) throw error
+  const counts: Record<string, number> = {}
+  for (const row of data ?? []) {
+    const k = String((row as { logged_date: string }).logged_date).slice(0, 10)
+    counts[k] = (counts[k] ?? 0) + 1
+  }
+  return counts
+}
+
+/** Copia todos os itens de um dia para outro (novos ids). Retorna quantidade copiada. */
+export async function copyDietEntriesFromDate(
+  userId: string,
+  fromLoggedDate: string,
+  toLoggedDate: string,
+): Promise<number> {
+  if (fromLoggedDate === toLoggedDate) return 0
+  const items = await listDietEntries(userId, fromLoggedDate)
+  if (items.length === 0) return 0
+
+  const rows = items.map((e) => ({
+    user_id: userId,
+    logged_date: toLoggedDate,
+    meal_type: e.meal_type,
+    name: e.name,
+    quantity_text: e.quantity_text,
+    calories: e.calories,
+    protein_g: e.protein_g,
+    carbs_g: e.carbs_g,
+    fat_g: e.fat_g,
+    notes: e.notes,
+    sort_order: e.sort_order,
+  }))
+
+  const { error } = await supabase.from('diet_entries').insert(rows)
+  if (error) throw error
+  return rows.length
+}
+
 export async function listDietEntries(userId: string, loggedDate: string): Promise<DietEntry[]> {
   const { data, error } = await supabase
     .from('diet_entries')

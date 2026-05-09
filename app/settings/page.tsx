@@ -8,6 +8,7 @@ import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import WebPushSettings from '@/components/settings/WebPushSettings'
 import TelegramSettings from '@/components/settings/TelegramSettings'
+import ApiKeysSettings from '@/components/settings/ApiKeysSettings'
 import { getSession } from '@/lib/auth'
 import { getUserSettings, updateUserSettings, type UserSettingsData } from '@/lib/data/settings'
 import { exportFullBackup, restoreFullBackup, exportSimpleBackup, restoreSimpleBackup, detectBackupModules, deleteAllAgenda, type BackupData, type BackupModule, type SimpleBackupData, type DateFilterOption } from '@/lib/data/backup'
@@ -334,6 +335,9 @@ export default function SettingsPage() {
           initialSettings={settings}
           onUpdate={refreshSettings}
         />
+
+        {/* API / automação */}
+        <ApiKeysSettings />
 
         {/* ============ BACKUP SIMPLIFICADO PARA IA ============ */}
         <Card className="p-6 border-l-4 border-l-indigo-500">

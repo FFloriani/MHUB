@@ -37,3 +37,16 @@ Após executar o SQL, o sistema de configurações estará funcionando. Os usuá
 - Escolher se querem receber notificações ou não
 - Definir quantos minutos antes do compromisso querem ser notificados (1 minuto até 24 horas)
 
+---
+
+## Chaves de API (automação / IA)
+
+Para habilitar a API HTTP `/api/v1/*` com `Authorization: Bearer ...`:
+
+1. No **Supabase SQL Editor**, execute o arquivo `supabase_migrations/20260511_user_api_keys.sql` (tabela `user_api_keys` + RLS).
+2. No painel Supabase: **Project Settings → API**, copie a **`service_role`** (secreta).
+3. No **Vercel** (ou `.env.local`): adicione `SUPABASE_SERVICE_ROLE_KEY` com essa chave. **Não** use `NEXT_PUBLIC_` para ela.
+4. No app: **Configurações → API para automação**, gere uma chave com os escopos desejados.
+
+Documentação dos endpoints: **`MHUB_API.md`** na raiz do repositório.
+

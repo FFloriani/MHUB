@@ -98,6 +98,41 @@ export type Database = {
           notification_minutes_before?: number
         }
       }
+      user_api_keys: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          token_prefix: string
+          key_hash: string
+          scopes: string[]
+          created_at: string
+          last_used_at: string | null
+          revoked_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name?: string
+          token_prefix: string
+          key_hash: string
+          scopes?: string[]
+          created_at?: string
+          last_used_at?: string | null
+          revoked_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          token_prefix?: string
+          key_hash?: string
+          scopes?: string[]
+          created_at?: string
+          last_used_at?: string | null
+          revoked_at?: string | null
+        }
+      }
       finance_categories: {
         Row: {
           id: string
@@ -385,6 +420,146 @@ export type Database = {
           file_name?: string
           mime_type?: string | null
           size_bytes?: number | null
+        }
+      }
+      workout_plans: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          division_type: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name?: string
+          division_type?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          division_type?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      workout_days: {
+        Row: {
+          id: string
+          plan_id: string
+          day_letter: string
+          name: string
+          muscle_groups: string[]
+          rest_hours: number
+          color: string
+          order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          plan_id: string
+          day_letter: string
+          name: string
+          muscle_groups?: string[]
+          rest_hours?: number
+          color?: string
+          order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          plan_id?: string
+          day_letter?: string
+          name?: string
+          muscle_groups?: string[]
+          rest_hours?: number
+          color?: string
+          order?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      workout_exercises: {
+        Row: {
+          id: string
+          day_id: string
+          name: string
+          sets: number
+          reps: string
+          rest_seconds: number
+          weight_kg: number | null
+          notes: string | null
+          order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          day_id: string
+          name: string
+          sets?: number
+          reps?: string
+          rest_seconds?: number
+          weight_kg?: number | null
+          notes?: string | null
+          order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          day_id?: string
+          name?: string
+          sets?: number
+          reps?: string
+          rest_seconds?: number
+          weight_kg?: number | null
+          notes?: string | null
+          order?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      workout_logs: {
+        Row: {
+          id: string
+          user_id: string
+          day_id: string | null
+          event_id: string | null
+          completed_at: string
+          duration_minutes: number | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          day_id?: string | null
+          event_id?: string | null
+          completed_at?: string
+          duration_minutes?: number | null
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          day_id?: string | null
+          event_id?: string | null
+          completed_at?: string
+          duration_minutes?: number | null
+          notes?: string | null
+          created_at?: string
         }
       }
       subjects: {

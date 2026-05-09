@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Key, Loader2, Plus, Copy, Ban, AlertTriangle } from 'lucide-react'
+import { Key, Loader2, Plus, Copy, Ban, AlertTriangle, BookOpen } from 'lucide-react'
+import Link from 'next/link'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
@@ -121,16 +122,45 @@ export default function ApiKeysSettings() {
   }
 
   return (
-    <Card className="p-6 border-l-4 border-l-amber-500">
+    <Card id="gerenciar-chaves-api" className="p-6 border-l-4 border-l-amber-500 scroll-mt-24">
       <h2 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
         <Key className="w-5 h-5 text-amber-600" />
         API para automação (IA / scripts)
       </h2>
+      <div className="mb-6 p-4 rounded-xl bg-indigo-50 border border-indigo-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <BookOpen className="w-10 h-10 text-indigo-600 shrink-0" />
+          <div>
+            <p className="font-semibold text-gray-900">Como usar com ChatGPT, Claude ou Cursor</p>
+            <p className="text-sm text-gray-600 mt-1">
+              Guia em português, com texto pronto para colar na IA e teste no terminal.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/api-docs"
+          className="inline-flex items-center justify-center rounded-lg font-medium transition-colors px-4 py-2 text-base bg-primary text-white hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary w-full sm:w-auto whitespace-nowrap"
+        >
+          Abrir guia no site
+        </Link>
+      </div>
+
       <p className="text-sm text-gray-500 mb-4">
         Crie um token com escopos limitados. Use no header{' '}
         <code className="bg-gray-100 px-1 rounded text-xs">Authorization: Bearer …</code> nas rotas{' '}
-        <code className="bg-gray-100 px-1 rounded text-xs">/api/v1/*</code>. Documentação em{' '}
-        <code className="bg-gray-100 px-1 rounded text-xs">MHUB_API.md</code>.
+        <code className="bg-gray-100 px-1 rounded text-xs">/api/v1/*</code>.
+      </p>
+      <p className="text-sm text-gray-600 mb-4">
+        Referência técnica extra (opcional):{' '}
+        <a
+          href="https://github.com/FFloriani/MHUB/blob/main/MHUB_API.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-indigo-600 underline font-medium"
+        >
+          MHUB_API.md no GitHub
+        </a>
+        .
       </p>
 
       <div className="rounded-xl bg-amber-50 border border-amber-100 p-4 flex gap-2 text-sm text-amber-900 mb-6">

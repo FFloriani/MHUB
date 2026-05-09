@@ -13,7 +13,8 @@ import {
     User,
     X,
     BookOpen,
-    Dumbbell
+    Dumbbell,
+    Bot,
 } from 'lucide-react'
 import { signOut } from '@/lib/auth'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -53,6 +54,7 @@ export default function Sidebar({ isOpen, setIsOpen, isExpanded, setIsExpanded, 
         { name: 'Financeiro', icon: DollarSign, path: '/financial' },
         { name: 'Estudos', icon: BookOpen, path: '/studies' },
         { name: 'Treino', icon: Dumbbell, path: '/workout' },
+        { name: 'Guia API', icon: Bot, path: '/api-docs' },
         { name: 'Configurações', icon: Settings, path: '/settings' },
     ]
 

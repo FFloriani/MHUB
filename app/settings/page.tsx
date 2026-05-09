@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Save, Loader2, ArrowLeft, Upload, Download, Bell, Sparkles, Calendar, ListTodo, DollarSign, BookOpen, Check, AlertCircle, Trash2 } from 'lucide-react'
+import { Save, Loader2, ArrowLeft, Upload, Download, Bell, Sparkles, Calendar, ListTodo, DollarSign, BookOpen, Check, AlertCircle, Trash2, Bot } from 'lucide-react'
 import Link from 'next/link'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
@@ -258,6 +258,41 @@ export default function SettingsPage() {
       </header>
 
       <main className="p-6 mt-16 md:mt-20 max-w-4xl space-y-8">
+
+        {/* Documentação da API — sempre no topo para o usuário achar */}
+        <Card
+          id="documentacao-api"
+          className="p-6 border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/90 to-white shadow-sm scroll-mt-24"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+            <div className="flex gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white">
+                <Bot className="w-7 h-7" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Guia da API (automação e IA)</h2>
+                <p className="text-sm text-gray-600 mt-1.5 leading-relaxed max-w-xl">
+                  Página só do MHUB com passo a passo em português: criar chave, URL certa, texto pronto para colar no
+                  ChatGPT / Claude / Cursor e teste no terminal. Não precisa abrir GitHub.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0">
+              <Link
+                href="/api-docs"
+                className="inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors text-center"
+              >
+                Abrir documentação no site
+              </Link>
+              <a
+                href="#gerenciar-chaves-api"
+                className="inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-medium text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 transition-colors text-center"
+              >
+                Gerar ou revogar chaves (abaixo)
+              </a>
+            </div>
+          </div>
+        </Card>
 
         {/* Notificações Locais */}
         <Card className="p-6">

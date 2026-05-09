@@ -18,6 +18,9 @@ export async function GET(request: Request) {
     user_id: ctx.userId,
     scopes: ctx.scopes,
     api: 'mhub-v1',
+    /** Guia no site (login) */
+    guide_url: '/api-docs',
+    /** Referência técnica no repositório */
     docs: '/MHUB_API.md',
   })
 }

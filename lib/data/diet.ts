@@ -7,11 +7,39 @@ export type DietEntry = Database['public']['Tables']['diet_entries']['Row']
 
 export type DietDayMeal = DietMealSlot & { entries: DietEntry[] }
 
+const WEEKDAY_LABELS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+export function normalizeRecurrenceDays(raw: unknown): number[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const set = new Set<number>()
+  for (const x of raw) {
+    if (typeof x === 'number' && x >= 0 && x <= 6) set.add(Math.floor(x))
+  }
+  if (set.size === 0) return null
+  return Array.from(set).sort((a, b) => a - b)
+}
+
+/** Rótulo curto para badge na UI (0=Dom … 6=Sáb). */
+export function formatRecurrenceDaysLabel(days: number[] | null | undefined): string | null {
+  if (!days?.length) return null
+  if (days.length === 7) return 'Todos os dias'
+  return days.map((d) => WEEKDAY_LABELS_PT[d] ?? '?').join(', ')
+}
+
 function ymd(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+function localFromYmd(ymdStr: string): Date {
+  const [y, m, d] = ymdStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function dowFromYmd(ymdStr: string): number {
+  return localFromYmd(ymdStr).getDay()
 }
 
 /** "HH:MM" para <input type="time" /> (Postgres devolve "HH:MM:SS"). */
@@ -53,15 +81,56 @@ function sortEntries(entries: DietEntry[]): DietEntry[] {
   })
 }
 
+/** Refeições só deste dia (não recorrentes). */
 export async function listMealSlots(userId: string, loggedDate: string): Promise<DietMealSlot[]> {
   const { data, error } = await supabase
     .from('diet_meal_slots')
     .select('*')
     .eq('user_id', userId)
     .eq('logged_date', loggedDate)
+    .is('recurrence_days', null)
 
   if (error) throw error
   return sortSlots((data as DietMealSlot[]) ?? [])
+}
+
+async function listSkippedSlotIds(userId: string, loggedDate: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('diet_recurring_skips')
+    .select('meal_slot_id')
+    .eq('user_id', userId)
+    .eq('skip_date', loggedDate.slice(0, 10))
+
+  if (error) throw error
+  return new Set((data ?? []).map((r: { meal_slot_id: string }) => r.meal_slot_id))
+}
+
+/** Refeições visíveis num dia: pontuais da data + recorrentes cujo weekday bate, menos “pulos”. */
+export async function listMealSlotsForDate(userId: string, loggedDate: string): Promise<DietMealSlot[]> {
+  const dow = dowFromYmd(loggedDate)
+  const [oneOff, recurring, skips] = await Promise.all([
+    supabase
+      .from('diet_meal_slots')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('logged_date', loggedDate.slice(0, 10))
+      .is('recurrence_days', null),
+    supabase
+      .from('diet_meal_slots')
+      .select('*')
+      .eq('user_id', userId)
+      .is('logged_date', null)
+      .contains('recurrence_days', [dow]),
+    listSkippedSlotIds(userId, loggedDate),
+  ])
+
+  if (oneOff.error) throw oneOff.error
+  if (recurring.error) throw recurring.error
+
+  const a = (oneOff.data as DietMealSlot[]) ?? []
+  const b = (recurring.data as DietMealSlot[]) ?? []
+  const merged = [...a, ...b].filter((s) => !skips.has(s.id))
+  return sortSlots(merged)
 }
 
 export async function nextSlotSortOrder(userId: string, loggedDate: string): Promise<number> {
@@ -70,16 +139,40 @@ export async function nextSlotSortOrder(userId: string, loggedDate: string): Pro
   return Math.max(...slots.map((s) => s.sort_order)) + 1
 }
 
+async function nextGlobalSortOrder(userId: string): Promise<number> {
+  const { data, error } = await supabase.from('diet_meal_slots').select('sort_order').eq('user_id', userId)
+  if (error) throw error
+  if (!data?.length) return 0
+  return Math.max(...data.map((r: { sort_order: number }) => r.sort_order)) + 1
+}
+
 export async function createMealSlot(
   userId: string,
-  payload: { logged_date: string; title: string; meal_time?: string | null; sort_order?: number },
+  payload: {
+    logged_date?: string | null
+    recurrence_days?: number[] | null
+    title: string
+    meal_time?: string | null
+    sort_order?: number
+  },
 ): Promise<DietMealSlot> {
-  const sort_order = payload.sort_order ?? (await nextSlotSortOrder(userId, payload.logged_date))
+  const rec = normalizeRecurrenceDays(payload.recurrence_days)
+  let logged_date: string | null
+  if (rec && rec.length > 0) {
+    logged_date = null
+  } else {
+    const d = payload.logged_date?.slice(0, 10)
+    if (!d) throw new Error('Data obrigatória para refeição pontual')
+    logged_date = d
+  }
+
+  const sort_order = payload.sort_order ?? (await nextGlobalSortOrder(userId))
   const { data, error } = await supabase
     .from('diet_meal_slots')
     .insert({
       user_id: userId,
-      logged_date: payload.logged_date,
+      logged_date,
+      recurrence_days: rec,
       title: payload.title.trim(),
       meal_time: payload.meal_time ?? null,
       sort_order,
@@ -94,13 +187,16 @@ export async function createMealSlot(
 export async function updateMealSlot(
   userId: string,
   id: string,
-  patch: Partial<Pick<DietMealSlot, 'title' | 'meal_time' | 'sort_order' | 'logged_date'>>,
+  patch: Partial<Pick<DietMealSlot, 'title' | 'meal_time' | 'sort_order' | 'logged_date' | 'recurrence_days'>>,
 ): Promise<DietMealSlot> {
   const updates: Record<string, unknown> = {}
   if (patch.title !== undefined) updates.title = patch.title.trim()
   if (patch.meal_time !== undefined) updates.meal_time = patch.meal_time
   if (patch.sort_order !== undefined) updates.sort_order = patch.sort_order
   if (patch.logged_date !== undefined) updates.logged_date = patch.logged_date
+  if (patch.recurrence_days !== undefined) {
+    updates.recurrence_days = patch.recurrence_days === null ? null : normalizeRecurrenceDays(patch.recurrence_days)
+  }
 
   const { data, error } = await supabase
     .from('diet_meal_slots')
@@ -119,9 +215,47 @@ export async function deleteMealSlot(userId: string, id: string): Promise<void> 
   if (error) throw error
 }
 
-function localFromYmd(ymdStr: string): Date {
-  const [y, m, d] = ymdStr.split('-').map(Number)
-  return new Date(y, m - 1, d)
+export async function addRecurringSkip(userId: string, mealSlotId: string, skipDate: string): Promise<void> {
+  const { error } = await supabase.from('diet_recurring_skips').insert({
+    user_id: userId,
+    meal_slot_id: mealSlotId,
+    skip_date: skipDate.slice(0, 10),
+  })
+  if (error) throw error
+}
+
+export async function removeRecurringSkip(userId: string, mealSlotId: string, skipDate: string): Promise<void> {
+  const { error } = await supabase
+    .from('diet_recurring_skips')
+    .delete()
+    .eq('user_id', userId)
+    .eq('meal_slot_id', mealSlotId)
+    .eq('skip_date', skipDate.slice(0, 10))
+  if (error) throw error
+}
+
+export type RecurringSkipRow = { meal_slot_id: string; title: string }
+
+/** Refeições recorrentes ocultas neste dia (para reativar). */
+export async function listRecurringSkipsForDate(userId: string, skipDate: string): Promise<RecurringSkipRow[]> {
+  const d = skipDate.slice(0, 10)
+  const { data: skips, error: e1 } = await supabase
+    .from('diet_recurring_skips')
+    .select('meal_slot_id')
+    .eq('user_id', userId)
+    .eq('skip_date', d)
+  if (e1) throw e1
+  const ids = (skips ?? []).map((r: { meal_slot_id: string }) => r.meal_slot_id)
+  if (ids.length === 0) return []
+
+  const { data: slots, error: e2 } = await supabase
+    .from('diet_meal_slots')
+    .select('id, title')
+    .eq('user_id', userId)
+    .in('id', ids)
+  if (e2) throw e2
+  const byId = new Map((slots as { id: string; title: string }[] | null)?.map((s) => [s.id, s.title]) ?? [])
+  return ids.map((id) => ({ meal_slot_id: id, title: byId.get(id) ?? 'Refeição' }))
 }
 
 /** Datas ISO (YYYY-MM-DD) na **mesma semana** que `anchorYmd`, uma por dia da semana (0=Dom .. 6=Sáb). */
@@ -178,13 +312,27 @@ export async function listDietEntries(userId: string, loggedDate: string): Promi
 }
 
 export async function loadDietDay(userId: string, loggedDate: string): Promise<DietDayMeal[]> {
-  const [slots, entries] = await Promise.all([
-    listMealSlots(userId, loggedDate),
-    listDietEntries(userId, loggedDate),
-  ])
+  const slots = await listMealSlotsForDate(userId, loggedDate)
+  if (slots.length === 0) return []
+
+  const slotIds = slots.map((s) => s.id)
+  const { data: allEntries, error } = await supabase
+    .from('diet_entries')
+    .select('*')
+    .eq('user_id', userId)
+    .in('meal_slot_id', slotIds)
+
+  if (error) throw error
+  const entries = (allEntries as DietEntry[]) ?? []
+  const d = loggedDate.slice(0, 10)
+  const filtered = entries.filter((e) => {
+    if (e.logged_date == null || e.logged_date === '') return true
+    return String(e.logged_date).slice(0, 10) === d
+  })
+
   const bySlot = new Map<string, DietEntry[]>()
   for (const s of slots) bySlot.set(s.id, [])
-  for (const e of entries) {
+  for (const e of filtered) {
     const arr = bySlot.get(e.meal_slot_id) ?? []
     arr.push(e)
     bySlot.set(e.meal_slot_id, arr)
@@ -198,7 +346,8 @@ export async function loadDietDay(userId: string, loggedDate: string): Promise<D
 export async function createDietEntry(
   userId: string,
   payload: {
-    logged_date: string
+    /** `null` = item do modelo da refeição recorrente (vale em todos os dias da recorrência). */
+    logged_date: string | null
     meal_slot_id: string
     name: string
     quantity_text?: string | null
@@ -210,11 +359,16 @@ export async function createDietEntry(
     sort_order?: number
   },
 ): Promise<DietEntry> {
+  const logged =
+    payload.logged_date === null || payload.logged_date === ''
+      ? null
+      : payload.logged_date.slice(0, 10)
+
   const { data, error } = await supabase
     .from('diet_entries')
     .insert({
       user_id: userId,
-      logged_date: payload.logged_date,
+      logged_date: logged,
       meal_slot_id: payload.meal_slot_id,
       name: payload.name.trim(),
       quantity_text: payload.quantity_text?.trim() || null,
@@ -247,6 +401,7 @@ export async function updateDietEntry(
       | 'fat_g'
       | 'notes'
       | 'sort_order'
+      | 'logged_date'
     >
   >,
 ): Promise<DietEntry> {
@@ -260,6 +415,10 @@ export async function updateDietEntry(
   if (patch.fat_g !== undefined) updates.fat_g = patch.fat_g
   if (patch.notes !== undefined) updates.notes = patch.notes?.trim() || null
   if (patch.sort_order !== undefined) updates.sort_order = patch.sort_order
+  if (patch.logged_date !== undefined) {
+    updates.logged_date =
+      patch.logged_date === null || patch.logged_date === '' ? null : patch.logged_date.slice(0, 10)
+  }
 
   const { data, error } = await supabase
     .from('diet_entries')
@@ -283,18 +442,13 @@ export async function fetchDietEntryCountsInRange(
   from: string,
   to: string,
 ): Promise<Record<string, number>> {
-  const { data, error } = await supabase
-    .from('diet_entries')
-    .select('logged_date')
-    .eq('user_id', userId)
-    .gte('logged_date', from)
-    .lte('logged_date', to)
-
-  if (error) throw error
+  const start = localFromYmd(from.slice(0, 10))
+  const end = localFromYmd(to.slice(0, 10))
   const counts: Record<string, number> = {}
-  for (const row of data ?? []) {
-    const k = String((row as { logged_date: string }).logged_date).slice(0, 10)
-    counts[k] = (counts[k] ?? 0) + 1
+  for (let t = start.getTime(); t <= end.getTime(); t += 24 * 60 * 60 * 1000) {
+    const iso = ymd(new Date(t))
+    const meals = await loadDietDay(userId, iso)
+    counts[iso] = allEntriesFromDay(meals).length
   }
   return counts
 }

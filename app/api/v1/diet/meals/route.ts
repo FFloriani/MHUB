@@ -3,15 +3,16 @@ import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { jsonOk, jsonError } from '@/lib/server/api-auth'
 import { parseISO } from 'date-fns'
 
-function parseLoggedDateFromBody(body: Record<string, unknown>, request: Request): string {
-  if (typeof body.logged_date === 'string') return body.logged_date.slice(0, 10)
-  const url = new URL(request.url)
-  const d = url.searchParams.get('date')
-  if (d) {
-    const parsed = parseISO(d)
-    if (!Number.isNaN(parsed.getTime())) return d.slice(0, 10)
+/** Normaliza inteiros 0–6 únicos e ordenados. */
+function normalizeRecurrenceDays(body: Record<string, unknown>): number[] | null {
+  const raw = body.recurrence_days
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const set = new Set<number>()
+  for (const x of raw) {
+    if (typeof x === 'number' && x >= 0 && x <= 6) set.add(Math.floor(x))
   }
-  return new Date().toISOString().slice(0, 10)
+  if (set.size === 0) return null
+  return Array.from(set).sort((a, b) => a - b)
 }
 
 /** Normaliza hora para Postgres HH:MM:SS ou null. */
@@ -26,6 +27,17 @@ function parseMealTime(v: unknown): string | null {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
+function parseLoggedDateFromBody(body: Record<string, unknown>, request: Request): string | undefined {
+  if (typeof body.logged_date === 'string') return body.logged_date.slice(0, 10)
+  const url = new URL(request.url)
+  const d = url.searchParams.get('date')
+  if (d) {
+    const parsed = parseISO(d)
+    if (!Number.isNaN(parsed.getTime())) return d.slice(0, 10)
+  }
+  return undefined
+}
+
 export async function POST(request: Request) {
   return runV1(request, 'diet:write', async ({ userId }) => {
     const admin = getSupabaseAdmin()
@@ -36,7 +48,6 @@ export async function POST(request: Request) {
       return jsonError('JSON inválido', 400)
     }
 
-    const logged_date = parseLoggedDateFromBody(body, request)
     const title = typeof body.title === 'string' ? body.title.trim() : ''
     if (!title) return jsonError('Campo obrigatório: title', 400)
 
@@ -45,19 +56,26 @@ export async function POST(request: Request) {
       return jsonError('meal_time inválido (use HH:MM)', 400)
     }
 
-    const { data: existing } = await admin
+    const rec = normalizeRecurrenceDays(body)
+    let logged_date: string | null = null
+
+    if (rec == null) {
+      const d =
+        parseLoggedDateFromBody(body, request) ??
+        new Date().toISOString().slice(0, 10)
+      logged_date = d
+    }
+
+    const { data: orderRows } = await admin
       .from('diet_meal_slots')
       .select('sort_order')
       .eq('user_id', userId)
-      .eq('logged_date', logged_date)
-      .order('sort_order', { ascending: false })
-      .limit(1)
 
     const nextOrder =
       typeof body.sort_order === 'number'
         ? body.sort_order
-        : existing?.[0]?.sort_order !== undefined
-          ? (existing[0].sort_order as number) + 1
+        : orderRows?.length
+          ? Math.max(...orderRows.map((r: { sort_order: number }) => r.sort_order)) + 1
           : 0
 
     const { data, error } = await admin
@@ -65,6 +83,7 @@ export async function POST(request: Request) {
       .insert({
         user_id: userId,
         logged_date,
+        recurrence_days: rec,
         title,
         meal_time,
         sort_order: nextOrder,

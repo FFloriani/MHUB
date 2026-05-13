@@ -569,35 +569,59 @@ export type Database = {
         Row: {
           id: string
           user_id: string
-          logged_date: string
+          logged_date: string | null
           title: string
           meal_time: string | null
           sort_order: number
+          recurrence_days: number[] | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
-          logged_date: string
+          logged_date?: string | null
           title: string
           meal_time?: string | null
           sort_order?: number
+          recurrence_days?: number[] | null
         }
         Update: {
           id?: string
           user_id?: string
-          logged_date?: string
+          logged_date?: string | null
           title?: string
           meal_time?: string | null
           sort_order?: number
+          recurrence_days?: number[] | null
+        }
+      }
+      diet_recurring_skips: {
+        Row: {
+          id: string
+          user_id: string
+          meal_slot_id: string
+          skip_date: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          meal_slot_id: string
+          skip_date: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          meal_slot_id?: string
+          skip_date?: string
         }
       }
       diet_entries: {
         Row: {
           id: string
           user_id: string
-          logged_date: string
+          logged_date: string | null
           meal_slot_id: string
           name: string
           quantity_text: string | null
@@ -613,7 +637,7 @@ export type Database = {
         Insert: {
           id?: string
           user_id: string
-          logged_date: string
+          logged_date?: string | null
           meal_slot_id: string
           name: string
           quantity_text?: string | null

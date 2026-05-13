@@ -21,6 +21,7 @@ import Input from '@/components/ui/Input'
 import { useAuth } from '@/components/providers/AuthProvider'
 import {
   allEntriesFromDay,
+  addRecurringSkip,
   createDietEntry,
   createMealSlot,
   deleteDietEntry,
@@ -28,15 +29,19 @@ import {
   fetchDietEntryCountsInRange,
   findOrCreateMatchingMealSlot,
   formatMealTimeLabel,
+  formatRecurrenceDaysLabel,
   inputTimeToPg,
   isoDatesInWeekForWeekdays,
+  listRecurringSkipsForDate,
   loadDietDay,
   mealTimeToInput,
+  removeRecurringSkip,
   summarizeDay,
   updateDietEntry,
   updateMealSlot,
   type DietDayMeal,
   type DietEntry,
+  type RecurringSkipRow,
   ymd,
 } from '@/lib/data/diet'
 import { cn } from '@/lib/utils'
@@ -83,17 +88,23 @@ export default function DietPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [weekCounts, setWeekCounts] = useState<Record<string, number>>({})
+  const [hiddenSkips, setHiddenSkips] = useState<RecurringSkipRow[]>([])
 
   const [itemModalOpen, setItemModalOpen] = useState(false)
   const [activeSlotId, setActiveSlotId] = useState<string | null>(null)
   const [editingEntry, setEditingEntry] = useState<DietEntry | null>(null)
   const [itemForm, setItemForm] = useState(emptyItemForm)
+  /** Só para refeição recorrente: alimento extra só no dia visualizado. */
+  const [itemOnlyThisDay, setItemOnlyThisDay] = useState(false)
   /** 0=Dom … 6=Sáb — dias da semana em que o novo item também será criado (semana do dia selecionado na tela). */
   const [repeatWeekdayMask, setRepeatWeekdayMask] = useState<number[]>([])
 
   const [newMealOpen, setNewMealOpen] = useState(false)
   const [newMealTitle, setNewMealTitle] = useState('')
   const [newMealTime, setNewMealTime] = useState('')
+  /** true = refeição só na data do topo; false = marcar dias da semana (recorrente). */
+  const [newMealOneOffOnly, setNewMealOneOffOnly] = useState(false)
+  const [newMealRecurrenceMask, setNewMealRecurrenceMask] = useState<number[]>([0, 1, 2, 3, 4, 5, 6])
 
   const [editingMealId, setEditingMealId] = useState<string | null>(null)
   const [editMealTitle, setEditMealTitle] = useState('')
@@ -108,16 +119,19 @@ export default function DietPage() {
       const from = ymd(weekStart)
       const to = ymd(addDays(weekStart, 6))
 
-      const [dayMeals, counts] = await Promise.all([
+      const [dayMeals, counts, skips] = await Promise.all([
         loadDietDay(user.id, date),
         fetchDietEntryCountsInRange(user.id, from, to),
+        listRecurringSkipsForDate(user.id, date),
       ])
       setMeals(dayMeals)
       setWeekCounts(counts)
+      setHiddenSkips(skips)
     } catch (e) {
       console.error(e)
       setMeals([])
       setWeekCounts({})
+      setHiddenSkips([])
     } finally {
       setLoading(false)
     }
@@ -148,11 +162,13 @@ export default function DietPage() {
 
   const allEntries = useMemo(() => allEntriesFromDay(meals), [meals])
   const summary = useMemo(() => summarizeDay(allEntries), [allEntries])
+  const activeSlotForModal = useMemo(() => meals.find((m) => m.id === activeSlotId) ?? null, [meals, activeSlotId])
 
   function openCreateItem(slotId: string) {
     setEditingEntry(null)
     setActiveSlotId(slotId)
     setItemForm({ ...emptyItemForm })
+    setItemOnlyThisDay(false)
     setRepeatWeekdayMask([localDateFromIso(date).getDay()])
     setItemModalOpen(true)
   }
@@ -188,6 +204,7 @@ export default function DietPage() {
 
   function closeItemModal() {
     setItemModalOpen(false)
+    setItemOnlyThisDay(false)
     setRepeatWeekdayMask([localDateFromIso(date).getDay()])
   }
 
@@ -233,6 +250,46 @@ export default function DietPage() {
     }
   }
 
+  function toggleNewMealWeekday(w: number) {
+    setNewMealRecurrenceMask((prev) => {
+      const set = new Set(prev.length > 0 ? prev : [0, 1, 2, 3, 4, 5, 6])
+      if (set.has(w)) {
+        if (set.size <= 1) return Array.from(set).sort((a, b) => a - b)
+        set.delete(w)
+      } else {
+        set.add(w)
+      }
+      return Array.from(set).sort((a, b) => a - b)
+    })
+  }
+
+  async function handleSkipRecurringDay(slotId: string) {
+    if (!user) return
+    if (
+      !confirm(
+        'Ocultar esta refeição recorrente só neste dia? Você pode restaurar abaixo ou usar outra refeição pontual.',
+      )
+    )
+      return
+    try {
+      await addRecurringSkip(user.id, slotId, date)
+      await load()
+    } catch (e) {
+      console.error(e)
+      alert('Não foi possível ocultar.')
+    }
+  }
+
+  async function handleRestoreSkip(mealSlotId: string) {
+    if (!user) return
+    try {
+      await removeRecurringSkip(user.id, mealSlotId, date)
+      await load()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   async function handleCreateMeal(e: React.FormEvent) {
     e.preventDefault()
     if (!user) return
@@ -240,18 +297,30 @@ export default function DietPage() {
     if (!title) return
     setSaving(true)
     try {
-      await createMealSlot(user.id, {
-        logged_date: date,
-        title,
-        meal_time: inputTimeToPg(newMealTime),
-      })
+      if (newMealOneOffOnly) {
+        await createMealSlot(user.id, {
+          logged_date: date,
+          title,
+          meal_time: inputTimeToPg(newMealTime),
+        })
+      } else {
+        const mask =
+          newMealRecurrenceMask.length > 0 ? newMealRecurrenceMask : [localDateFromIso(date).getDay()]
+        await createMealSlot(user.id, {
+          recurrence_days: mask,
+          title,
+          meal_time: inputTimeToPg(newMealTime),
+        })
+      }
       setNewMealOpen(false)
       setNewMealTitle('')
       setNewMealTime('')
+      setNewMealOneOffOnly(false)
+      setNewMealRecurrenceMask([0, 1, 2, 3, 4, 5, 6])
       await load()
     } catch (err) {
       console.error(err)
-      alert('Não foi possível criar a refeição. A migração 20260512 foi aplicada no Supabase?')
+      alert('Não foi possível criar a refeição. Rode a migração 20260515_diet_meal_recurrence no Supabase.')
     } finally {
       setSaving(false)
     }
@@ -293,23 +362,33 @@ export default function DietPage() {
           alert('Refeição não encontrada. Recarregue a página.')
           return
         }
-        const weekdays =
-          repeatWeekdayMask.length > 0 ? repeatWeekdayMask : [localDateFromIso(date).getDay()]
-        const targetDates = isoDatesInWeekForWeekdays(date, weekdays)
-        await Promise.all(
-          targetDates.map(async (iso) => {
-            const slot = await findOrCreateMatchingMealSlot(user.id, iso, {
-              title: templateMeal.title,
-              meal_time: templateMeal.meal_time,
-              sort_order: templateMeal.sort_order,
-            })
-            await createDietEntry(user.id, {
-              logged_date: iso,
-              meal_slot_id: slot.id,
-              ...payload,
-            })
-          }),
-        )
+
+        const recurring = Boolean(templateMeal.recurrence_days?.length)
+        if (recurring) {
+          await createDietEntry(user.id, {
+            logged_date: itemOnlyThisDay ? date : null,
+            meal_slot_id: activeSlotId,
+            ...payload,
+          })
+        } else {
+          const weekdays =
+            repeatWeekdayMask.length > 0 ? repeatWeekdayMask : [localDateFromIso(date).getDay()]
+          const targetDates = isoDatesInWeekForWeekdays(date, weekdays)
+          await Promise.all(
+            targetDates.map(async (iso) => {
+              const slot = await findOrCreateMatchingMealSlot(user.id, iso, {
+                title: templateMeal.title,
+                meal_time: templateMeal.meal_time,
+                sort_order: templateMeal.sort_order,
+              })
+              await createDietEntry(user.id, {
+                logged_date: iso,
+                meal_slot_id: slot.id,
+                ...payload,
+              })
+            }),
+          )
+        }
       }
       closeItemModal()
       await load()
@@ -355,9 +434,10 @@ export default function DietPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Dieta</h1>
               <p className="text-sm text-gray-500">
-                <strong className="font-medium text-gray-700">Nova refeição</strong> e, em cada card, ícone de lápis
-                (editar) ou lixeira (apagar a refeição e os alimentos). Horário opcional. Ao cadastrar um alimento,
-                dá para repetir nos dias da semana na semana corrente.
+                <strong className="font-medium text-gray-700">Nova refeição</strong>: escolha se é{' '}
+                <strong>só neste dia</strong> ou <strong>recorrente</strong> (dias da semana, como na agenda). Itens na
+                refeição recorrente valem em todos esses dias; use “Só neste dia” no alimento ou “Ocultar neste dia” na
+                refeição se quiser exceção.
               </p>
             </div>
           </div>
@@ -453,7 +533,11 @@ export default function DietPage() {
               type="button"
               size="sm"
               className="inline-flex items-center gap-2 w-fit bg-emerald-600 text-white hover:bg-emerald-700"
-              onClick={() => setNewMealOpen(true)}
+              onClick={() => {
+                setNewMealOneOffOnly(false)
+                setNewMealRecurrenceMask([0, 1, 2, 3, 4, 5, 6])
+                setNewMealOpen(true)
+              }}
             >
               <Plus className="w-4 h-4" />
               Nova refeição
@@ -461,6 +545,21 @@ export default function DietPage() {
             <p className="text-sm text-gray-600 capitalize sm:ml-auto">{formatDisplayDate(date)}</p>
           </div>
         </Card>
+
+        {hiddenSkips.length > 0 ? (
+          <Card className="p-4 mb-6 border-amber-200 bg-amber-50/80">
+            <p className="text-sm font-medium text-amber-900 mb-2">Refeições recorrentes ocultas neste dia</p>
+            <ul className="flex flex-wrap gap-2">
+              {hiddenSkips.map((s) => (
+                <li key={s.meal_slot_id}>
+                  <Button type="button" size="sm" variant="secondary" onClick={() => void handleRestoreSkip(s.meal_slot_id)}>
+                    Restaurar “{s.title}”
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ) : null}
 
         {hasMacros ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
@@ -496,7 +595,15 @@ export default function DietPage() {
         ) : meals.length === 0 ? (
           <Card className="p-8 text-center text-gray-500">
             <p className="mb-4">Nenhuma refeição neste dia.</p>
-            <Button type="button" onClick={() => setNewMealOpen(true)} className="bg-emerald-600 text-white">
+            <Button
+              type="button"
+              onClick={() => {
+                setNewMealOneOffOnly(false)
+                setNewMealRecurrenceMask([0, 1, 2, 3, 4, 5, 6])
+                setNewMealOpen(true)
+              }}
+              className="bg-emerald-600 text-white"
+            >
               <Plus className="w-4 h-4 mr-2" />
               Criar primeira refeição
             </Button>
@@ -555,6 +662,11 @@ export default function DietPage() {
                           ) : (
                             <p className="text-xs text-gray-400 mt-0.5">Sem horário definido</p>
                           )}
+                          {formatRecurrenceDaysLabel(meal.recurrence_days) ? (
+                            <span className="inline-flex mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-teal-800 bg-teal-100 px-2 py-0.5 rounded-md w-fit">
+                              {formatRecurrenceDaysLabel(meal.recurrence_days)}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                     )}
@@ -582,6 +694,18 @@ export default function DietPage() {
                           <Trash2 className="w-4 h-4" />
                           <span className="hidden sm:inline text-xs">Remover</span>
                         </Button>
+                        {meal.recurrence_days?.length ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-amber-800 gap-1"
+                            onClick={() => void handleSkipRecurringDay(meal.id)}
+                            title="Não mostrar esta refeição recorrente só neste dia"
+                          >
+                            Ocultar hoje
+                          </Button>
+                        ) : null}
                         <Button type="button" size="sm" variant="secondary" onClick={() => openCreateItem(meal.id)}>
                           <Plus className="w-4 h-4 mr-1" />
                           Alimento
@@ -673,6 +797,70 @@ export default function DietPage() {
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-2">Quando vale</label>
+                  <div className="flex flex-wrap gap-3 mb-3">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        className="rounded border-gray-300"
+                        checked={!newMealOneOffOnly}
+                        onChange={() => setNewMealOneOffOnly(false)}
+                      />
+                      Nos dias da semana (repetir toda semana)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        className="rounded border-gray-300"
+                        checked={newMealOneOffOnly}
+                        onChange={() => setNewMealOneOffOnly(true)}
+                      />
+                      Só em {formatDisplayDate(date).split(',')[0] ?? 'este dia'}
+                    </label>
+                  </div>
+                  {!newMealOneOffOnly ? (
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-2">
+                      <p className="text-xs text-emerald-900">Marque os dias (igual tarefas da agenda)</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {WEEKDAY_LABELS.map((label, w) => {
+                          const on = newMealRecurrenceMask.includes(w)
+                          return (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => toggleNewMealWeekday(w)}
+                              className={cn(
+                                'rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-colors min-w-[2.5rem]',
+                                on
+                                  ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                                  : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+                              )}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="flex flex-wrap gap-3 pt-1">
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-emerald-800 underline"
+                          onClick={() => setNewMealRecurrenceMask([0, 1, 2, 3, 4, 5, 6])}
+                        >
+                          Toda a semana
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-emerald-800 underline"
+                          onClick={() => setNewMealRecurrenceMask([1, 2, 3, 4, 5])}
+                        >
+                          Seg–Sex
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
                 <div className="flex gap-2 justify-end">
                   <Button
                     type="button"
@@ -681,6 +869,8 @@ export default function DietPage() {
                       setNewMealOpen(false)
                       setNewMealTitle('')
                       setNewMealTime('')
+                      setNewMealOneOffOnly(false)
+                      setNewMealRecurrenceMask([0, 1, 2, 3, 4, 5, 6])
                     }}
                     disabled={saving}
                   >
@@ -759,13 +949,29 @@ export default function DietPage() {
                     onChange={(e) => setItemForm((f) => ({ ...f, notes: e.target.value }))}
                   />
                 </div>
-                {!editingEntry ? (
+                {!editingEntry && activeSlotForModal?.recurrence_days?.length ? (
+                  <label className="flex items-start gap-2 text-sm cursor-pointer rounded-lg border border-gray-200 p-3 bg-gray-50/80">
+                    <input
+                      type="checkbox"
+                      className="mt-1 rounded border-gray-300"
+                      checked={itemOnlyThisDay}
+                      onChange={(e) => setItemOnlyThisDay(e.target.checked)}
+                    />
+                    <span>
+                      <span className="font-medium text-gray-800">Só neste dia</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Marca o alimento só em {WEEKDAY_LABELS[localDateFromIso(date).getDay()]} (
+                        {date}); os outros dias da semana continuam com a lista padrão da refeição.
+                      </span>
+                    </span>
+                  </label>
+                ) : null}
+                {!editingEntry && !activeSlotForModal?.recurrence_days?.length ? (
                   <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 space-y-2">
                     <p className="text-xs font-semibold text-emerald-900">Repetir nesta semana</p>
                     <p className="text-xs text-emerald-800/80 leading-relaxed">
-                      Marque os dias em que este alimento também deve aparecer. Usa o mesmo nome de refeição e horário;
-                      se aquele dia ainda não tiver essa refeição, ela é criada automaticamente. Semanas seguintes: repita
-                      ao cadastrar de novo na semana ou marque os dias outra vez.
+                      Marque os dias em que este alimento também deve aparecer. Se aquele dia ainda não tiver esta
+                      refeição pontual, ela é criada automaticamente.
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {WEEKDAY_LABELS.map((label, w) => {

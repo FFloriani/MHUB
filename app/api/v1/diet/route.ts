@@ -2,6 +2,7 @@ import { parseISO } from 'date-fns'
 import { runV1 } from '@/lib/server/v1-handler'
 import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { jsonOk, jsonError } from '@/lib/server/api-auth'
+import { loadDietDayAdmin, isoWeekday } from '@/lib/server/diet-day'
 
 function parseLoggedDate(url: URL): string {
   const d = url.searchParams.get('date')
@@ -10,23 +11,6 @@ function parseLoggedDate(url: URL): string {
     if (!Number.isNaN(parsed.getTime())) return d.slice(0, 10)
   }
   return new Date().toISOString().slice(0, 10)
-}
-
-function sortSlots<T extends { meal_time: string | null; sort_order: number; created_at: string }>(rows: T[]): T[] {
-  return [...rows].sort((a, b) => {
-    if (a.meal_time && b.meal_time) return a.meal_time.localeCompare(b.meal_time)
-    if (a.meal_time) return -1
-    if (b.meal_time) return 1
-    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
-    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  })
-}
-
-function sortEntries<T extends { sort_order: number; created_at: string }>(rows: T[]): T[] {
-  return [...rows].sort((a, b) => {
-    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
-    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  })
 }
 
 /**
@@ -56,46 +40,12 @@ export async function GET(request: Request) {
       const fromStr = from.slice(0, 10)
       const toStr = to.slice(0, 10)
 
-      const [{ data: slots, error: e1 }, { data: entries, error: e2 }] = await Promise.all([
-        admin
-          .from('diet_meal_slots')
-          .select('*')
-          .eq('user_id', userId)
-          .gte('logged_date', fromStr)
-          .lte('logged_date', toStr),
-        admin
-          .from('diet_entries')
-          .select('*')
-          .eq('user_id', userId)
-          .gte('logged_date', fromStr)
-          .lte('logged_date', toStr),
-      ])
-      if (e1) return jsonError(e1.message, 400)
-      if (e2) return jsonError(e2.message, 400)
-
-      const slotsByDate = new Map<string, typeof slots>()
-      for (const s of slots ?? []) {
-        const arr = slotsByDate.get(s.logged_date) ?? []
-        arr.push(s)
-        slotsByDate.set(s.logged_date, arr)
-      }
-      const entriesBySlot = new Map<string, typeof entries>()
-      for (const e of entries ?? []) {
-        const arr = entriesBySlot.get(e.meal_slot_id) ?? []
-        arr.push(e)
-        entriesBySlot.set(e.meal_slot_id, arr)
-      }
-
-      const days: Array<{ date: string; meal_slots: unknown[] }> = []
+      const days: Array<{ date: string; meal_slots: Awaited<ReturnType<typeof loadDietDayAdmin>> }> = []
       for (let i = 0; i < dayCount; i += 1) {
         const d = new Date(start)
         d.setDate(start.getDate() + i)
         const dateStr = d.toISOString().slice(0, 10)
-        const daySlots = sortSlots(slotsByDate.get(dateStr) ?? [])
-        const meal_slots = daySlots.map((s) => ({
-          ...s,
-          entries: sortEntries(entriesBySlot.get(s.id) ?? []),
-        }))
+        const meal_slots = await loadDietDayAdmin(admin, userId, dateStr)
         days.push({ date: dateStr, meal_slots })
       }
 
@@ -103,29 +53,7 @@ export async function GET(request: Request) {
     }
 
     const loggedDate = parseLoggedDate(url)
-
-    const [{ data: slots, error: e1 }, { data: entries, error: e2 }] = await Promise.all([
-      admin.from('diet_meal_slots').select('*').eq('user_id', userId).eq('logged_date', loggedDate),
-      admin.from('diet_entries').select('*').eq('user_id', userId).eq('logged_date', loggedDate),
-    ])
-
-    if (e1) return jsonError(e1.message, 400)
-    if (e2) return jsonError(e2.message, 400)
-
-    const orderedSlots = sortSlots(slots ?? [])
-    const bySlot = new Map<string, typeof entries>()
-    for (const s of orderedSlots) bySlot.set(s.id, [])
-    for (const e of entries ?? []) {
-      const arr = bySlot.get(e.meal_slot_id) ?? []
-      arr.push(e)
-      bySlot.set(e.meal_slot_id, arr)
-    }
-
-    const meal_slots = orderedSlots.map((s) => ({
-      ...s,
-      entries: sortEntries(bySlot.get(s.id) ?? []),
-    }))
-
+    const meal_slots = await loadDietDayAdmin(admin, userId, loggedDate)
     return jsonOk({ date: loggedDate, meal_slots })
   })
 }
@@ -147,11 +75,31 @@ export async function POST(request: Request) {
 
     const { data: slot } = await admin
       .from('diet_meal_slots')
-      .select('id, user_id, logged_date')
+      .select('id, user_id, logged_date, recurrence_days')
       .eq('id', meal_slot_id)
       .maybeSingle()
-    if (!slot || slot.user_id !== userId || slot.logged_date !== logged_date) {
-      return jsonError('Refeição (slot) inválida para esta data', 400)
+    if (!slot || slot.user_id !== userId) {
+      return jsonError('Refeição (slot) inválida', 400)
+    }
+
+    const rec = slot.recurrence_days as number[] | null
+    const isRecurring = Array.isArray(rec) && rec.length > 0 && slot.logged_date == null
+
+    let entryLoggedDate: string | null
+    if (isRecurring) {
+      const dow = isoWeekday(logged_date)
+      if (!rec.includes(dow)) {
+        return jsonError('Esta refeição recorrente não vale neste dia da semana', 400)
+      }
+      entryLoggedDate =
+        body.per_day === true && typeof body.logged_date === 'string'
+          ? body.logged_date.slice(0, 10)
+          : null
+    } else {
+      if (slot.logged_date !== logged_date) {
+        return jsonError('Refeição (slot) inválida para esta data', 400)
+      }
+      entryLoggedDate = logged_date
     }
 
     const name = typeof body.name === 'string' ? body.name.trim() : ''
@@ -165,7 +113,7 @@ export async function POST(request: Request) {
 
     const insert = {
       user_id: userId,
-      logged_date,
+      logged_date: entryLoggedDate,
       meal_slot_id,
       name,
       quantity_text: typeof body.quantity_text === 'string' ? body.quantity_text.trim() || null : null,

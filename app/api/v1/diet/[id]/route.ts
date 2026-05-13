@@ -1,6 +1,18 @@
 import { runV1 } from '@/lib/server/v1-handler'
 import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { jsonOk, jsonError } from '@/lib/server/api-auth'
+import { isoWeekday } from '@/lib/server/diet-day'
+
+function slotAppliesToDate(slot: {
+  logged_date: string | null
+  recurrence_days: number[] | null
+}, targetDateYmd: string): boolean {
+  const rec = slot.recurrence_days
+  if (rec && rec.length > 0 && slot.logged_date == null) {
+    return rec.includes(isoWeekday(targetDateYmd))
+  }
+  return slot.logged_date === targetDateYmd
+}
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   return runV1(request, 'diet:write', async ({ userId }) => {
@@ -14,7 +26,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     const { data: existing } = await admin
       .from('diet_entries')
-      .select('user_id, logged_date')
+      .select('user_id, logged_date, meal_slot_id')
       .eq('id', params.id)
       .maybeSingle()
     if (!existing || existing.user_id !== userId) return jsonError('Registro não encontrado', 404)
@@ -27,15 +39,33 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
 
     const updates: Record<string, unknown> = {}
-    if (typeof body.logged_date === 'string') updates.logged_date = body.logged_date.slice(0, 10)
+    if ('logged_date' in body) {
+      if (body.logged_date === null) updates.logged_date = null
+      else if (typeof body.logged_date === 'string') {
+        const s = body.logged_date.slice(0, 10)
+        updates.logged_date = s.length ? s : null
+      }
+    }
+
     if (typeof body.meal_slot_id === 'string') {
       const { data: slot } = await admin
         .from('diet_meal_slots')
-        .select('id, user_id, logged_date')
+        .select('id, user_id, logged_date, recurrence_days')
         .eq('id', body.meal_slot_id)
         .maybeSingle()
-      const targetDate = (updates.logged_date as string) || (existing.logged_date as string)
-      if (!slot || slot.user_id !== userId || slot.logged_date !== targetDate) {
+
+      const templateDate =
+        (updates.logged_date as string | null | undefined) ??
+        (existing.logged_date as string | null) ??
+        null
+      const anchor =
+        typeof body.anchor_date === 'string'
+          ? body.anchor_date.slice(0, 10)
+          : templateDate
+          ? String(templateDate).slice(0, 10)
+          : null
+
+      if (!slot || slot.user_id !== userId || !anchor || !slotAppliesToDate(slot, anchor)) {
         return jsonError('meal_slot_id inválido para esta data', 400)
       }
       updates.meal_slot_id = body.meal_slot_id

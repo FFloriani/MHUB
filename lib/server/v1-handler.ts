@@ -1,4 +1,3 @@
-import { hasScope } from '@/lib/api/scopes'
 import {
   authenticateV1Request,
   jsonError,
@@ -9,12 +8,12 @@ import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 type Handler = (ctx: V1AuthContext) => Promise<Response>
 
 /**
- * Autentica Bearer, checa escopo e injeta contexto. Usa service role após auth.
+ * Autentica Bearer token e injeta contexto. Token válido = acesso total.
  */
-export async function runV1(request: Request, requiredScope: string, handler: Handler): Promise<Response> {
+export async function runV1(request: Request, _requiredScope: string, handler: Handler): Promise<Response> {
   const ctx = await authenticateV1Request(request)
   if (!ctx) {
-    return jsonError('Não autorizado. Envie Authorization: Bearer <sua_chave>.', 401)
+    return jsonError('Não autorizado. Envie Authorization: Bearer <seu_token>.', 401)
   }
 
   try {
@@ -22,12 +21,6 @@ export async function runV1(request: Request, requiredScope: string, handler: Ha
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Configuração do servidor incompleta.'
     return jsonError(msg, 503)
-  }
-
-  if (!hasScope(ctx.scopes, requiredScope)) {
-    return jsonError(`Permissão negada. Escopo necessário: ${requiredScope}`, 403, {
-      scope: requiredScope,
-    })
   }
 
   try {

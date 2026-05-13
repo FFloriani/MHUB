@@ -16,7 +16,6 @@ export async function GET(request: Request) {
 
   return jsonOk({
     user_id: ctx.userId,
-    scopes: ctx.scopes,
     api: 'mhub-v1',
     docs_home: '/docs',
     guide_url: '/docs/guia-ia',

@@ -84,18 +84,21 @@ export type Database = {
           notification_minutes_before: number
           created_at: string
           updated_at: string
+          api_token: string | null
         }
         Insert: {
           id?: string
           user_id: string
           notifications_enabled?: boolean
           notification_minutes_before?: number
+          api_token?: string | null
         }
         Update: {
           id?: string
           user_id?: string
           notifications_enabled?: boolean
           notification_minutes_before?: number
+          api_token?: string | null
         }
       }
       user_api_keys: {

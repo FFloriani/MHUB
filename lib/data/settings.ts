@@ -1,6 +1,45 @@
 import { supabase } from '../supabase'
 import type { Database } from '../supabase'
 
+function generateApiToken(): string {
+  const a = new Uint8Array(32)
+  crypto.getRandomValues(a)
+  const hex = Array.from(a).map((b) => b.toString(16).padStart(2, '0')).join('')
+  return `mhub_${hex}`
+}
+
+export async function getApiToken(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('user_settings')
+    .select('api_token')
+    .eq('user_id', userId)
+    .single()
+  return data?.api_token ?? null
+}
+
+export async function regenerateApiToken(userId: string): Promise<string> {
+  const token = generateApiToken()
+  const { data: existing } = await supabase
+    .from('user_settings')
+    .select('id')
+    .eq('user_id', userId)
+    .single()
+
+  if (existing) {
+    const { error } = await supabase
+      .from('user_settings')
+      .update({ api_token: token })
+      .eq('user_id', userId)
+    if (error) throw error
+  } else {
+    const { error } = await supabase
+      .from('user_settings')
+      .insert({ user_id: userId, api_token: token })
+    if (error) throw error
+  }
+  return token
+}
+
 type UserSettings = Database['public']['Tables']['user_settings']['Row']
 type UserSettingsInsert = Database['public']['Tables']['user_settings']['Insert']
 type UserSettingsUpdate = Database['public']['Tables']['user_settings']['Update'] & {

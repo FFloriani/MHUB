@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:apply-diet-postgrest": "node scripts/apply-diet-postgrest.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
@@ -28,6 +29,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "pg": "^8.13.1",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

@@ -12,15 +12,16 @@ export const API_SCOPES = [
   { id: 'finance:*', label: 'Financeiro (completo)', description: 'Categorias e transações.' },
   { id: 'finance:read', label: 'Financeiro — leitura', description: 'Listar categorias e transações.' },
   { id: 'finance:write', label: 'Financeiro — escrita', description: 'Criar e editar categorias e transações.' },
-  { id: 'workout:*', label: 'Treino (completo)', description: 'Plano ativo, dias, exercícios.' },
-  { id: 'workout:read', label: 'Treino — leitura', description: 'Ler plano e fichas.' },
-  { id: 'workout:write', label: 'Treino — escrita', description: 'Alterar exercícios (rotas disponíveis).' },
+  { id: 'workout:*', label: 'Treino (completo)', description: 'Planos, dias, exercícios e logs.' },
+  { id: 'workout:read', label: 'Treino — leitura', description: 'Ler planos, fichas e histórico.' },
+  { id: 'workout:write', label: 'Treino — escrita', description: 'Criar/editar planos, dias, exercícios e registrar treinos.' },
   { id: 'settings:*', label: 'Preferências (completo)', description: 'Configurações da conta no app.' },
   { id: 'settings:read', label: 'Preferências — leitura', description: 'Ler notificações e preferências.' },
   { id: 'settings:write', label: 'Preferências — escrita', description: 'Atualizar notificações e preferências.' },
   { id: 'diet:*', label: 'Dieta (completo)', description: 'Ler e registrar refeições pela API.' },
-  { id: 'diet:read', label: 'Dieta — leitura', description: 'GET /api/v1/diet (por data).' },
+  { id: 'diet:read', label: 'Dieta — leitura', description: 'GET /api/v1/diet (por data ou intervalo).' },
   { id: 'diet:write', label: 'Dieta — escrita', description: 'POST/PATCH/DELETE em entradas de dieta.' },
+  { id: 'backup:read', label: 'Backup — leitura', description: 'Snapshot completo (GET /api/v1/backup).' },
 ] as const
 
 export type ApiScopeId = (typeof API_SCOPES)[number]['id']

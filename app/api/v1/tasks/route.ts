@@ -2,9 +2,42 @@ import { runV1 } from '@/lib/server/v1-handler'
 import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { jsonOk, jsonError } from '@/lib/server/api-auth'
 
+/**
+ * GET /api/v1/tasks
+ *
+ * Padrão (sem parâmetros): pendentes + concluídas dos últimos 7 dias.
+ * Query opcional:
+ *  - `status=pending|completed|all` (default: combo padrão)
+ *  - `from=YYYY-MM-DD&to=YYYY-MM-DD` filtra por `target_date`
+ *  - `limit` (default 500)
+ */
 export async function GET(request: Request) {
   return runV1(request, 'agenda:read', async ({ userId }) => {
     const admin = getSupabaseAdmin()
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const from = url.searchParams.get('from')
+    const to = url.searchParams.get('to')
+    const limitParam = Number(url.searchParams.get('limit') ?? '500')
+    const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 1000) : 500
+
+    if (status === 'pending' || status === 'completed' || status === 'all' || from || to) {
+      let q = admin
+        .from('tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .order('target_date', { ascending: true, nullsFirst: false })
+        .limit(limit)
+
+      if (status === 'pending') q = q.eq('is_completed', false)
+      else if (status === 'completed') q = q.eq('is_completed', true)
+      if (from) q = q.gte('target_date', from)
+      if (to) q = q.lte('target_date', to)
+
+      const { data, error } = await q
+      if (error) throw error
+      return jsonOk({ tasks: data ?? [] })
+    }
 
     const { data: pending, error: e1 } = await admin
       .from('tasks')

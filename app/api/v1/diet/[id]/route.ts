@@ -2,13 +2,6 @@ import { runV1 } from '@/lib/server/v1-handler'
 import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { jsonOk, jsonError } from '@/lib/server/api-auth'
 
-const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack', 'other'] as const
-type MealType = (typeof MEAL_TYPES)[number]
-
-function isMealType(s: string): s is MealType {
-  return (MEAL_TYPES as readonly string[]).includes(s)
-}
-
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   return runV1(request, 'diet:write', async ({ userId }) => {
     const admin = getSupabaseAdmin()
@@ -21,7 +14,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     const { data: existing } = await admin
       .from('diet_entries')
-      .select('user_id')
+      .select('user_id, logged_date')
       .eq('id', params.id)
       .maybeSingle()
     if (!existing || existing.user_id !== userId) return jsonError('Registro não encontrado', 404)
@@ -35,11 +28,17 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     const updates: Record<string, unknown> = {}
     if (typeof body.logged_date === 'string') updates.logged_date = body.logged_date.slice(0, 10)
-    if (typeof body.meal_type === 'string') {
-      if (!isMealType(body.meal_type)) {
-        return jsonError('meal_type inválido', 400)
+    if (typeof body.meal_slot_id === 'string') {
+      const { data: slot } = await admin
+        .from('diet_meal_slots')
+        .select('id, user_id, logged_date')
+        .eq('id', body.meal_slot_id)
+        .maybeSingle()
+      const targetDate = (updates.logged_date as string) || (existing.logged_date as string)
+      if (!slot || slot.user_id !== userId || slot.logged_date !== targetDate) {
+        return jsonError('meal_slot_id inválido para esta data', 400)
       }
-      updates.meal_type = body.meal_type
+      updates.meal_slot_id = body.meal_slot_id
     }
     if (typeof body.name === 'string') updates.name = body.name.trim()
     if ('quantity_text' in body)

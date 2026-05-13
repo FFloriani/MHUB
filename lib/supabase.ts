@@ -562,12 +562,40 @@ export type Database = {
           created_at?: string
         }
       }
+      diet_meal_slots: {
+        Row: {
+          id: string
+          user_id: string
+          logged_date: string
+          title: string
+          meal_time: string | null
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          logged_date: string
+          title: string
+          meal_time?: string | null
+          sort_order?: number
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          logged_date?: string
+          title?: string
+          meal_time?: string | null
+          sort_order?: number
+        }
+      }
       diet_entries: {
         Row: {
           id: string
           user_id: string
           logged_date: string
-          meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other'
+          meal_slot_id: string
           name: string
           quantity_text: string | null
           calories: number | null
@@ -583,7 +611,7 @@ export type Database = {
           id?: string
           user_id: string
           logged_date: string
-          meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other'
+          meal_slot_id: string
           name: string
           quantity_text?: string | null
           calories?: number | null
@@ -597,7 +625,7 @@ export type Database = {
           id?: string
           user_id?: string
           logged_date?: string
-          meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other'
+          meal_slot_id?: string
           name?: string
           quantity_text?: string | null
           calories?: number | null

@@ -76,10 +76,12 @@ export default function ApiReferencePage() {
           ['#me', 'GET /me'],
           ['#eventos', 'Eventos'],
           ['#tarefas', 'Tarefas'],
-          ['#financeiro', 'Financeiro'],
+          ['#financeiro', 'Financeiro (básico)'],
+          ['#financeiro-avancado', 'Financeiro (avançado)'],
           ['#treino', 'Treino'],
           ['#settings', 'Preferências'],
           ['#diet', 'Dieta'],
+          ['#backup', 'Backup'],
           ['#erros', 'Erros'],
           ['#exemplos', 'Exemplos'],
         ].map(([id, label]) => (
@@ -178,21 +180,32 @@ export default function ApiReferencePage() {
             ['DELETE', '/api/v1/events/:id', 'agenda:write'],
           ]}
         />
-        <h3 className="text-sm font-bold text-slate-800 mt-6 mb-2">GET</h3>
-        <p className="text-slate-600 text-sm mb-2">
-          Query <code className="bg-slate-100 px-1 rounded">date</code> opcional. Se ausente ou inválido, usa a{' '}
-          <strong>data de hoje</strong> no servidor. Retorno:
-        </p>
+        <h3 className="text-sm font-bold text-slate-800 mt-6 mb-2">GET — três modos</h3>
+        <ul className="text-slate-600 text-sm space-y-1 list-disc pl-5 mb-3">
+          <li>
+            <strong>Dia único</strong> (default): <code className="bg-slate-100 px-1 rounded">?date=YYYY-MM-DD</code>{' '}
+            (ou sem parâmetros = hoje). Inclui virtuais de eventos recorrentes.
+          </li>
+          <li>
+            <strong>Intervalo:</strong> <code className="bg-slate-100 px-1 rounded">?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code>{' '}
+            (até 31 dias). Devolve <code className="bg-slate-100 px-1 rounded">days: [{`{ date, events }`}]</code>.
+          </li>
+          <li>
+            <strong>Próximos:</strong> <code className="bg-slate-100 px-1 rounded">?upcoming=true&amp;limit=N</code>{' '}
+            (default 10, máx 50): varre até 60 dias e devolve <code className="bg-slate-100 px-1 rounded">events</code> +
+            agrupamento em <code className="bg-slate-100 px-1 rounded">days</code>.
+          </li>
+        </ul>
         <JsonExample>
-          {`{
-  "date": "2026-05-09",
-  "events": [ … ]
-}`}
+          {`// dia único
+{ "date": "2026-05-09", "events": [ … ] }
+
+// intervalo
+{ "from": "2026-05-09", "to": "2026-05-15", "days": [ { "date": "…", "events": [ … ] } ] }
+
+// upcoming
+{ "upcoming": true, "events": [ … ], "days": [ … ] }`}
         </JsonExample>
-        <p className="text-slate-600 text-sm mb-2">
-          A lista inclui ocorrências do dia, inclusive instâncias virtuais de eventos recorrentes (o app já calcula isso
-          no servidor).
-        </p>
         <h3 className="text-sm font-bold text-slate-800 mt-6 mb-2">POST (JSON)</h3>
         <ul className="text-slate-600 text-sm space-y-1 list-disc pl-5 mb-4">
           <li>
@@ -232,16 +245,19 @@ export default function ApiReferencePage() {
         />
         <h3 className="text-sm font-bold text-slate-800 mt-6 mb-2">GET</h3>
         <p className="text-slate-600 text-sm mb-2">
-          Monta uma lista em duas partes: todas as tarefas <strong>não concluídas</strong> (ordenadas por{' '}
-          <code className="bg-slate-100 px-1 rounded">target_date</code> ascendente), depois tarefas{' '}
-          <strong>concluídas</strong> cuja <code className="bg-slate-100 px-1 rounded">target_date</code> é nos{' '}
-          <strong>últimos 7 dias</strong> (mais recentes primeiro). Corpo:
+          <strong>Sem parâmetros:</strong> tarefas <strong>não concluídas</strong> (ordenadas por{' '}
+          <code className="bg-slate-100 px-1 rounded">target_date</code> ascendente) <strong>+</strong> concluídas dos{' '}
+          <strong>últimos 7 dias</strong>.
         </p>
-        <JsonExample>
-          {`{
-  "tasks": [ … ]
-}`}
-        </JsonExample>
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>Filtros opcionais:</strong> <code className="bg-slate-100 px-1 rounded">status=pending|completed|all</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">from=YYYY-MM-DD</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">to=YYYY-MM-DD</code> (filtra por{' '}
+          <code className="bg-slate-100 px-1 rounded">target_date</code>),{' '}
+          <code className="bg-slate-100 px-1 rounded">limit</code> (default 500, máx 1000). Qualquer um destes ativa o
+          modo filtrado e ignora a janela padrão de 7 dias.
+        </p>
+        <JsonExample>{`{ "tasks": [ … ] }`}</JsonExample>
         <h3 className="text-sm font-bold text-slate-800 mt-6 mb-2">POST (JSON)</h3>
         <p className="text-slate-600 text-sm mb-2">
           Obrigatório: <code className="bg-slate-100 px-1 rounded">title</code>. Opcionais:{' '}
@@ -347,41 +363,242 @@ export default function ApiReferencePage() {
         </p>
       </section>
 
-      <section id="treino" className="mb-14 scroll-mt-20">
-        <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4">Treino</h2>
+      <section id="financeiro-avancado" className="mb-14 scroll-mt-20">
+        <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4">
+          Financeiro — recorrentes, parceladas, orçamento e empréstimos
+        </h2>
+
+        <h3 className="text-lg font-semibold text-slate-800 mb-2">Recorrentes</h3>
         <Table
           headers={['Método', 'Rota', 'Escopo']}
           rows={[
-            ['GET', '/api/v1/workout', 'workout:read'],
-            ['PATCH', '/api/v1/workout/exercises/:id', 'workout:write'],
+            ['GET', '/api/v1/finance/recurring (?active=true)', 'finance:read'],
+            ['POST', '/api/v1/finance/recurring', 'finance:write'],
+            ['PATCH', '/api/v1/finance/recurring/:id', 'finance:write'],
+            ['DELETE', '/api/v1/finance/recurring/:id', 'finance:write'],
+            ['POST', '/api/v1/finance/recurring/materialize', 'finance:write'],
           ]}
         />
         <p className="text-slate-600 text-sm mb-2">
-          <strong>GET</strong> — retorna o <strong>plano ativo</strong> do usuário e os dias com exercícios:
+          <strong>POST</strong> — obrigatórios: <code className="bg-slate-100 px-1 rounded">title</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">kind</code> (<code className="bg-slate-100 px-1 rounded">expense</code> | <code className="bg-slate-100 px-1 rounded">income</code> | <code className="bg-slate-100 px-1 rounded">investment</code>),{' '}
+          <code className="bg-slate-100 px-1 rounded">amount</code>, <code className="bg-slate-100 px-1 rounded">day_of_month</code> (1–31),{' '}
+          <code className="bg-slate-100 px-1 rounded">start_date</code> (<code className="bg-slate-100 px-1 rounded">YYYY-MM-DD</code>). Opcionais:{' '}
+          <code className="bg-slate-100 px-1 rounded">end_date</code>, <code className="bg-slate-100 px-1 rounded">category_id</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">payment_method</code>, <code className="bg-slate-100 px-1 rounded">notes</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">active</code> (default true).
+        </p>
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>POST /materialize</strong> — body <code className="bg-slate-100 px-1 rounded text-xs">{`{ year, month }`}</code> (1–12).
+          Cria as transações do mês alvo para cada template ativo cujo intervalo cobre o mês, pulando os que já têm
+          transação naquele mês (idempotente). Resposta:{' '}
+          <code className="bg-slate-100 px-1 rounded text-xs">{`{ created: N, year, month }`}</code>.
+        </p>
+
+        <h3 className="text-lg font-semibold text-slate-800 mt-6 mb-2">Parceladas</h3>
+        <Table
+          headers={['Método', 'Rota', 'Escopo']}
+          rows={[
+            ['GET', '/api/v1/finance/installments', 'finance:read'],
+            ['POST', '/api/v1/finance/installments', 'finance:write'],
+            ['GET', '/api/v1/finance/installments/:id (com transactions)', 'finance:read'],
+            ['PATCH', '/api/v1/finance/installments/:id (só metadados)', 'finance:write'],
+            ['DELETE', '/api/v1/finance/installments/:id (cascade)', 'finance:write'],
+          ]}
+        />
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>POST</strong> — atômico: cria o cabeçalho e N transações filhas (uma por mês a partir de{' '}
+          <code className="bg-slate-100 px-1 rounded">first_due</code>). Valor de cada parcela ={' '}
+          <code className="bg-slate-100 px-1 rounded">total_amount / total_count</code> (ajuste de centavos na última).
+          Obrigatórios: <code className="bg-slate-100 px-1 rounded">title</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">total_amount</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">total_count</code> (≥1),{' '}
+          <code className="bg-slate-100 px-1 rounded">first_due</code>. Opcionais:{' '}
+          <code className="bg-slate-100 px-1 rounded">category_id</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">payment_method</code>, <code className="bg-slate-100 px-1 rounded">notes</code>.
+          Resposta: <code className="bg-slate-100 px-1 rounded text-xs">{`{ installment, transactions: [ … ] }`}</code>.
+        </p>
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>PATCH</strong> mexe só nos metadados (<code className="bg-slate-100 px-1 rounded">title</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">category_id</code>, <code className="bg-slate-100 px-1 rounded">payment_method</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">notes</code>). Pra mudar valor/quantidade, delete e recrie.{' '}
+          <strong>DELETE</strong> apaga as transações filhas em cascade.
+        </p>
+
+        <h3 className="text-lg font-semibold text-slate-800 mt-6 mb-2">Orçamento</h3>
+        <Table
+          headers={['Método', 'Rota', 'Escopo']}
+          rows={[
+            ['GET', '/api/v1/finance/budgets (?year&month → uso)', 'finance:read'],
+            ['POST', '/api/v1/finance/budgets (upsert por user_id+category_id)', 'finance:write'],
+            ['PATCH', '/api/v1/finance/budgets/:id', 'finance:write'],
+            ['DELETE', '/api/v1/finance/budgets/:id', 'finance:write'],
+          ]}
+        />
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>POST</strong> — obrigatórios <code className="bg-slate-100 px-1 rounded">category_id</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">monthly_limit</code> (≥0). Opcional{' '}
+          <code className="bg-slate-100 px-1 rounded">alert_threshold</code> (0–100, default 80). Faz{' '}
+          <em>upsert</em> — chamar 2x na mesma categoria atualiza.
+        </p>
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>GET</strong> com <code className="bg-slate-100 px-1 rounded">year</code> +{' '}
+          <code className="bg-slate-100 px-1 rounded">month</code> também devolve consumo:
         </p>
         <JsonExample>
           {`{
-  "plan": { … } | null,
-  "days": [
-    {
-      …campos do dia…,
-      "exercises": [ … ]
-    }
-  ]
+  "budgets": [ … ],
+  "usage": [
+    { "category_id": "…", "spent": 412.30, "percent": 82.46, "status": "warning" }
+  ],
+  "year": 2026, "month": 5
 }`}
         </JsonExample>
+        <p className="text-slate-600 text-sm">
+          <code className="bg-slate-100 px-1 rounded">status</code>:{' '}
+          <code className="bg-slate-100 px-1 rounded">ok</code> (abaixo do alerta),{' '}
+          <code className="bg-slate-100 px-1 rounded">warning</code> (≥ alerta, &lt; 100%),{' '}
+          <code className="bg-slate-100 px-1 rounded">over</code> (≥ 100%).
+        </p>
+
+        <h3 className="text-lg font-semibold text-slate-800 mt-6 mb-2">Empréstimos</h3>
+        <Table
+          headers={['Método', 'Rota', 'Escopo']}
+          rows={[
+            ['GET', '/api/v1/finance/loans (?status&direction)', 'finance:read'],
+            ['POST', '/api/v1/finance/loans', 'finance:write'],
+            ['GET', '/api/v1/finance/loans/:id (com payments)', 'finance:read'],
+            ['PATCH', '/api/v1/finance/loans/:id', 'finance:write'],
+            ['DELETE', '/api/v1/finance/loans/:id', 'finance:write'],
+            ['GET', '/api/v1/finance/loans/:id/payments', 'finance:read'],
+            ['POST', '/api/v1/finance/loans/:id/payments', 'finance:write'],
+            ['PATCH', '/api/v1/finance/loans/:id/payments/:paymentId', 'finance:write'],
+            ['DELETE', '/api/v1/finance/loans/:id/payments/:paymentId', 'finance:write'],
+          ]}
+        />
         <p className="text-slate-600 text-sm mb-2">
-          Se não houver plano ativo, <code className="bg-slate-100 px-1 rounded">plan</code> é <code className="bg-slate-100 px-1 rounded">null</code> e{' '}
-          <code className="bg-slate-100 px-1 rounded">days</code> é array vazio.
+          <strong>POST /loans</strong> — obrigatórios:{' '}
+          <code className="bg-slate-100 px-1 rounded">counterpart_name</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">direction</code> (<code className="bg-slate-100 px-1 rounded">lent</code>{' '}
+          = emprestei, <code className="bg-slate-100 px-1 rounded">borrowed</code> = peguei emprestado),{' '}
+          <code className="bg-slate-100 px-1 rounded">principal</code> (&gt;0),{' '}
+          <code className="bg-slate-100 px-1 rounded">taken_on</code> (YYYY-MM-DD). Opcionais:{' '}
+          <code className="bg-slate-100 px-1 rounded">due_date</code>, <code className="bg-slate-100 px-1 rounded">notes</code>.
+          Listagem inclui <code className="bg-slate-100 px-1 rounded">paid</code> e <code className="bg-slate-100 px-1 rounded">remaining</code>{' '}
+          calculados.
         </p>
         <p className="text-slate-600 text-sm">
-          <strong>PATCH /api/v1/workout/exercises/:id</strong> — atualiza um exercício que pertença ao seu usuário
-          (validação em cadeia exercício → dia → plano). Campos opcionais:{' '}
-          <code className="bg-slate-100 px-1 rounded">name</code>, <code className="bg-slate-100 px-1 rounded">sets</code> (número),{' '}
-          <code className="bg-slate-100 px-1 rounded">reps</code> (string), <code className="bg-slate-100 px-1 rounded">rest_seconds</code>{' '}
-          (número), <code className="bg-slate-100 px-1 rounded">weight_kg</code> (número ou <code className="bg-slate-100 px-1 rounded">null</code>),{' '}
-          <code className="bg-slate-100 px-1 rounded">notes</code>, <code className="bg-slate-100 px-1 rounded">order</code>. Não há rota
-          pública para criar planos ou dias pela API — somente leitura da estrutura e edição de exercícios existentes.
+          <strong>POST /payments</strong> — registra pagamento parcial e <strong>recalcula o status</strong> do empréstimo
+          (<code className="bg-slate-100 px-1 rounded">open</code> /{' '}
+          <code className="bg-slate-100 px-1 rounded">partial</code> /{' '}
+          <code className="bg-slate-100 px-1 rounded">paid</code>). Body:{' '}
+          <code className="bg-slate-100 px-1 rounded text-xs">{`{ amount (>0), paid_on, notes? }`}</code>. Resposta:{' '}
+          <code className="bg-slate-100 px-1 rounded text-xs">{`{ payment, totals: { paid, status } }`}</code>.
+        </p>
+      </section>
+
+      <section id="treino" className="mb-14 scroll-mt-20">
+        <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4">Treino</h2>
+        <p className="text-slate-600 text-sm mb-4">
+          Estrutura: <code className="bg-slate-100 px-1 rounded">plano</code> →{' '}
+          <code className="bg-slate-100 px-1 rounded">dias</code> →{' '}
+          <code className="bg-slate-100 px-1 rounded">exercícios</code>. Treinos concluídos vão em{' '}
+          <code className="bg-slate-100 px-1 rounded">workout_logs</code>.
+        </p>
+
+        <h3 className="text-lg font-semibold text-slate-800 mb-2">Estrutura aninhada</h3>
+        <Table
+          headers={['Método', 'Rota', 'Escopo']}
+          rows={[
+            ['GET', '/api/v1/workout (plano ativo)', 'workout:read'],
+            ['GET', '/api/v1/workout?plan_id=…', 'workout:read'],
+            ['GET', '/api/v1/workout?all=true', 'workout:read'],
+          ]}
+        />
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>GET</strong> sem nada devolve o plano ativo aninhado{' '}
+          <code className="bg-slate-100 px-1 rounded text-xs">{`{ plan, days: [{ …, exercises: [] }] }`}</code>.{' '}
+          <code className="bg-slate-100 px-1 rounded">?plan_id=…</code> abre um plano específico.{' '}
+          <code className="bg-slate-100 px-1 rounded">?all=true</code> lista todos: <code className="bg-slate-100 px-1 rounded text-xs">{`{ plans: [{ ...plan, days: [...] }] }`}</code>.
+        </p>
+
+        <h3 className="text-lg font-semibold text-slate-800 mt-6 mb-2">Planos</h3>
+        <Table
+          headers={['Método', 'Rota', 'Escopo']}
+          rows={[
+            ['GET', '/api/v1/workout/plans', 'workout:read'],
+            ['POST', '/api/v1/workout/plans', 'workout:write'],
+            ['GET', '/api/v1/workout/plans/:id', 'workout:read'],
+            ['PATCH', '/api/v1/workout/plans/:id', 'workout:write'],
+            ['DELETE', '/api/v1/workout/plans/:id', 'workout:write'],
+          ]}
+        />
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>POST</strong> — obrigatório <code className="bg-slate-100 px-1 rounded">name</code>. Opcionais:{' '}
+          <code className="bg-slate-100 px-1 rounded">division_type</code> (default <code className="bg-slate-100 px-1 rounded">AB</code>),{' '}
+          <code className="bg-slate-100 px-1 rounded">is_active</code>. Se{' '}
+          <code className="bg-slate-100 px-1 rounded">is_active=true</code> os outros planos ativos do usuário são
+          desativados automaticamente. <strong>PATCH</strong> aceita os mesmos campos; idem para ativação automática.
+        </p>
+
+        <h3 className="text-lg font-semibold text-slate-800 mt-6 mb-2">Dias</h3>
+        <Table
+          headers={['Método', 'Rota', 'Escopo']}
+          rows={[
+            ['POST', '/api/v1/workout/days (body: plan_id, day_letter, name, …)', 'workout:write'],
+            ['GET', '/api/v1/workout/days/:id (com exercises)', 'workout:read'],
+            ['PATCH', '/api/v1/workout/days/:id', 'workout:write'],
+            ['DELETE', '/api/v1/workout/days/:id', 'workout:write'],
+          ]}
+        />
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>POST</strong> — obrigatórios <code className="bg-slate-100 px-1 rounded">plan_id</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">day_letter</code> (ex.: A, B, C),{' '}
+          <code className="bg-slate-100 px-1 rounded">name</code>. Opcionais:{' '}
+          <code className="bg-slate-100 px-1 rounded">muscle_groups</code> (array de strings),{' '}
+          <code className="bg-slate-100 px-1 rounded">rest_hours</code>, <code className="bg-slate-100 px-1 rounded">color</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">order</code> (auto-incrementa se omitido).
+        </p>
+
+        <h3 className="text-lg font-semibold text-slate-800 mt-6 mb-2">Exercícios</h3>
+        <Table
+          headers={['Método', 'Rota', 'Escopo']}
+          rows={[
+            ['POST', '/api/v1/workout/exercises (body: day_id, name, …)', 'workout:write'],
+            ['PATCH', '/api/v1/workout/exercises/:id', 'workout:write'],
+            ['DELETE', '/api/v1/workout/exercises/:id', 'workout:write'],
+          ]}
+        />
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>POST</strong> — obrigatórios <code className="bg-slate-100 px-1 rounded">day_id</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">name</code>. Opcionais:{' '}
+          <code className="bg-slate-100 px-1 rounded">sets</code> (default 3),{' '}
+          <code className="bg-slate-100 px-1 rounded">reps</code> (string, default <code className="bg-slate-100 px-1 rounded">10</code>),{' '}
+          <code className="bg-slate-100 px-1 rounded">rest_seconds</code> (default 60),{' '}
+          <code className="bg-slate-100 px-1 rounded">weight_kg</code>, <code className="bg-slate-100 px-1 rounded">notes</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">order</code>. <strong>PATCH</strong> também aceita{' '}
+          <code className="bg-slate-100 px-1 rounded">day_id</code> (move para outro dia, validando ownership).
+        </p>
+
+        <h3 className="text-lg font-semibold text-slate-800 mt-6 mb-2">Logs (treinos concluídos)</h3>
+        <Table
+          headers={['Método', 'Rota', 'Escopo']}
+          rows={[
+            ['GET', '/api/v1/workout/logs (+ filtros)', 'workout:read'],
+            ['POST', '/api/v1/workout/logs', 'workout:write'],
+            ['PATCH', '/api/v1/workout/logs/:id', 'workout:write'],
+            ['DELETE', '/api/v1/workout/logs/:id', 'workout:write'],
+          ]}
+        />
+        <p className="text-slate-600 text-sm">
+          <strong>GET</strong> aceita <code className="bg-slate-100 px-1 rounded">from</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">to</code> (data ISO no <code className="bg-slate-100 px-1 rounded">completed_at</code>),{' '}
+          <code className="bg-slate-100 px-1 rounded">day_id</code>, <code className="bg-slate-100 px-1 rounded">limit</code> (default 100, máx 500).
+          Resposta <code className="bg-slate-100 px-1 rounded text-xs">{`{ "logs": [ … ] }`}</code>.{' '}
+          <strong>POST</strong> — todos opcionais: <code className="bg-slate-100 px-1 rounded">day_id</code> (validado),{' '}
+          <code className="bg-slate-100 px-1 rounded">event_id</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">completed_at</code> (default agora),{' '}
+          <code className="bg-slate-100 px-1 rounded">duration_minutes</code>, <code className="bg-slate-100 px-1 rounded">notes</code>.
         </p>
       </section>
 
@@ -421,39 +638,94 @@ export default function ApiReferencePage() {
       <section id="diet" className="mb-14 scroll-mt-20">
         <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4">Dieta</h2>
         <p className="text-slate-600 text-sm mb-4">
-          Registro de itens por dia e refeição (<code className="bg-slate-100 px-1 rounded">diet_entries</code>).
-          Tipos de refeição: <code className="bg-slate-100 px-1 rounded">breakfast</code>,{' '}
-          <code className="bg-slate-100 px-1 rounded">lunch</code>, <code className="bg-slate-100 px-1 rounded">snack</code>,{' '}
-          <code className="bg-slate-100 px-1 rounded">dinner</code>, <code className="bg-slate-100 px-1 rounded">other</code>.
+          Refeições por dia em <code className="bg-slate-100 px-1 rounded">diet_meal_slots</code> (título, hora opcional{' '}
+          <code className="bg-slate-100 px-1 rounded">meal_time</code>) e alimentos em{' '}
+          <code className="bg-slate-100 px-1 rounded">diet_entries</code> ligados por{' '}
+          <code className="bg-slate-100 px-1 rounded">meal_slot_id</code>. Ao remover uma refeição, os itens são apagados em cascata.
         </p>
         <Table
           headers={['Método', 'Rota', 'Escopo']}
           rows={[
             ['GET', '/api/v1/diet?date=YYYY-MM-DD', 'diet:read'],
+            ['GET', '/api/v1/diet?from=…&to=… (até 31 dias)', 'diet:read'],
+            ['POST', '/api/v1/diet/meals', 'diet:write'],
+            ['PATCH', '/api/v1/diet/meals/:id', 'diet:write'],
+            ['DELETE', '/api/v1/diet/meals/:id', 'diet:write'],
             ['POST', '/api/v1/diet', 'diet:write'],
             ['PATCH', '/api/v1/diet/:id', 'diet:write'],
             ['DELETE', '/api/v1/diet/:id', 'diet:write'],
           ]}
         />
         <p className="text-slate-600 text-sm mb-2">
-          <strong>GET</strong> — query <code className="bg-slate-100 px-1 rounded">date</code> opcional (default: hoje no servidor).
-          Resposta: <code className="bg-slate-100 px-1 rounded text-xs">{`{ "date": "YYYY-MM-DD", "entries": [ … ] }`}</code> com itens
-          ordenados por refeição (café → almoço → lanche → jantar → outro), depois <code className="bg-slate-100 px-1 rounded">sort_order</code> e
-          criação.
+          <strong>GET</strong> — dia único (default ou{' '}
+          <code className="bg-slate-100 px-1 rounded">?date=YYYY-MM-DD</code>):{' '}
+          <code className="bg-slate-100 px-1 rounded text-xs">{`{ "date": "…", "meal_slots": [ { …slot, "entries": [ … ] } ] }`}</code>.
+          Intervalo (<code className="bg-slate-100 px-1 rounded">?from=…&amp;to=…</code>, máx 31 dias):{' '}
+          <code className="bg-slate-100 px-1 rounded text-xs">{`{ "from": "…", "to": "…", "days": [ { "date": "…", "meal_slots": [ … ] } ] }`}</code>.
+          Slots ordenados por <code className="bg-slate-100 px-1 rounded">meal_time</code>, depois{' '}
+          <code className="bg-slate-100 px-1 rounded">sort_order</code> e criação.
         </p>
         <p className="text-slate-600 text-sm mb-2">
-          <strong>POST</strong> — obrigatórios: <code className="bg-slate-100 px-1 rounded">name</code>,{' '}
-          <code className="bg-slate-100 px-1 rounded">meal_type</code>. Opcionais:{' '}
+          <strong>POST /api/v1/diet/meals</strong> — obrigatório: <code className="bg-slate-100 px-1 rounded">title</code>. Opcionais:{' '}
           <code className="bg-slate-100 px-1 rounded">logged_date</code> (default hoje),{' '}
-          <code className="bg-slate-100 px-1 rounded">quantity_text</code>, <code className="bg-slate-100 px-1 rounded">calories</code> (inteiro),{' '}
+          <code className="bg-slate-100 px-1 rounded">meal_time</code> (<code className="bg-slate-100 px-1 rounded">HH:MM</code> ou{' '}
+          <code className="bg-slate-100 px-1 rounded">HH:MM:SS</code>), <code className="bg-slate-100 px-1 rounded">sort_order</code>.
+        </p>
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>PATCH / DELETE /api/v1/diet/meals/:id</strong> — atualizar ou remover a refeição do dia.{' '}
+          <code className="bg-slate-100 px-1 rounded">PATCH</code>: opcionais <code className="bg-slate-100 px-1 rounded">title</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">meal_time</code> (<code className="bg-slate-100 px-1 rounded">null</code> para limpar),{' '}
+          <code className="bg-slate-100 px-1 rounded">sort_order</code>, <code className="bg-slate-100 px-1 rounded">logged_date</code>.
+        </p>
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>POST /api/v1/diet</strong> — obrigatórios: <code className="bg-slate-100 px-1 rounded">name</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">meal_slot_id</code> (slot do mesmo <code className="bg-slate-100 px-1 rounded">logged_date</code>).
+          Opcionais: <code className="bg-slate-100 px-1 rounded">logged_date</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">quantity_text</code>, <code className="bg-slate-100 px-1 rounded">calories</code>,{' '}
           <code className="bg-slate-100 px-1 rounded">protein_g</code>, <code className="bg-slate-100 px-1 rounded">carbs_g</code>,{' '}
           <code className="bg-slate-100 px-1 rounded">fat_g</code>, <code className="bg-slate-100 px-1 rounded">notes</code>,{' '}
           <code className="bg-slate-100 px-1 rounded">sort_order</code>.
         </p>
         <p className="text-slate-600 text-sm">
-          <strong>PATCH / DELETE</strong> — <code className="bg-slate-100 px-1 rounded">PATCH</code> com qualquer subconjunto dos campos acima;
-          corpo vazio → <strong>400</strong>. <code className="bg-slate-100 px-1 rounded">DELETE</code> retorna{' '}
+          <strong>PATCH / DELETE /api/v1/diet/:id</strong> — item (entrada). <code className="bg-slate-100 px-1 rounded">PATCH</code> aceita os
+          campos do item e opcionalmente <code className="bg-slate-100 px-1 rounded">meal_slot_id</code> (válido para a data do registro). Corpo
+          vazio no PATCH → <strong>400</strong>. <code className="bg-slate-100 px-1 rounded">DELETE</code> retorna{' '}
           <code className="bg-slate-100 px-1 rounded text-xs">{`{ "deleted": true, "id": "…" }`}</code>.
+        </p>
+      </section>
+
+      <section id="backup" className="mb-14 scroll-mt-20">
+        <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4">Backup</h2>
+        <Table
+          headers={['Método', 'Rota', 'Escopo']}
+          rows={[['GET', '/api/v1/backup', 'backup:read']]}
+        />
+        <p className="text-slate-600 text-sm mb-2">
+          <strong>GET</strong> retorna um <em>snapshot completo</em> do usuário em uma única resposta, útil para uma IA
+          enxergar o estado em uma chamada. Estrutura:
+        </p>
+        <JsonExample>
+          {`{
+  "version": 2,
+  "timestamp": "…",
+  "user_id": "…",
+  "data": {
+    "user_settings": { … } | null,
+    "events": [ … ],
+    "tasks":  [ … ],
+    "finance": {
+      "categories": [ … ], "transactions": [ … ],
+      "recurring":  [ … ], "installments": [ … ],
+      "budgets":    [ … ], "loans": [ … ], "loan_payments": [ … ]
+    },
+    "workout": { "plans": [ … ], "days": [ … ], "exercises": [ … ], "logs": [ … ] },
+    "diet":    { "meal_slots": [ … ], "entries": [ … ] }
+  }
+}`}
+        </JsonExample>
+        <p className="text-slate-600 text-sm">
+          Não há rota REST de restauração pública — para reimportar, use a interface em{' '}
+          <Link href="/settings" className="text-indigo-600 underline font-medium">Configurações → Backup</Link>.
         </p>
       </section>
 

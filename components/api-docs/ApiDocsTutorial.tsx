@@ -66,23 +66,70 @@ Regras:
 - 401 = token inválido ou ausente. 403 = minha chave não tem permissão (escopo) para essa rota. 503 = a API não está disponível no servidor (configuração do deploy).
 
 Endpoints (API v1 — alinhado à documentação em /docs/api):
+
+# Identificação
 GET  /api/v1/me — user_id, scopes, links /docs
-GET  /api/v1/events?date=AAAA-MM-DD — { date, events }; date opcional (default hoje)
-POST /api/v1/events — title, start_time (ISO); opcional: end_time, description, is_recurring, recurrence_days (0-6), recurrence_end_date
+
+# Agenda
+GET  /api/v1/events?date=AAAA-MM-DD — dia (inclui virtuais de recorrentes)
+GET  /api/v1/events?from=…&to=… (até 31 dias) — { from, to, days:[{date,events}] }
+GET  /api/v1/events?upcoming=true&limit=N (default 10, máx 50) — próximos
+POST /api/v1/events — title, start_time (ISO); opc: end_time, description, is_recurring, recurrence_days[0-6], recurrence_end_date
 PATCH e DELETE /api/v1/events/:id
-GET  /api/v1/tasks — { tasks }: pendentes + concluídas dos últimos 7 dias
-POST /api/v1/tasks — title; opcional: is_completed, target_date
+GET  /api/v1/tasks — pendentes + concluídas últimos 7 dias (default)
+GET  /api/v1/tasks?status=pending|completed|all&from=…&to=…&limit=… — filtrado
+POST /api/v1/tasks — title; opc: is_completed, target_date
 PATCH e DELETE /api/v1/tasks/:id
-GET  /api/v1/finance/categories — { categories }
-POST /api/v1/finance/categories — name, kind; opcional: icon, color, is_archived, sort_order
+
+# Financeiro — básico
+GET  /api/v1/finance/categories
+POST /api/v1/finance/categories — name, kind; opc: icon, color, is_archived, sort_order
 PATCH e DELETE /api/v1/finance/categories/:id
-GET  /api/v1/finance/transactions — year+month ou from+to; opcional kind= expense|income|investment|all; sem datas: até 500
-POST /api/v1/finance/transactions — title, kind, amount, occurred_on; opcional: category_id, payment_method, notes, tags, paid
+GET  /api/v1/finance/transactions — year+month OU from+to; opc kind=expense|income|investment|all; sem datas: até 500
+POST /api/v1/finance/transactions — title, kind, amount, occurred_on; opc: category_id, payment_method, notes, tags, paid
 PATCH e DELETE /api/v1/finance/transactions/:id
-GET  /api/v1/workout — plano ativo + days + exercises
-PATCH /api/v1/workout/exercises/:id — só edição (não cria plano pela API)
-GET /api/v1/settings | PATCH /api/v1/settings
-GET /api/v1/diet?date=… | POST /api/v1/diet | PATCH/DELETE /api/v1/diet/:id
+
+# Financeiro — avançado
+GET/POST /api/v1/finance/recurring (?active=true) — title, kind, amount, day_of_month, start_date; opc: end_date, category_id, payment_method, notes, active
+PATCH e DELETE /api/v1/finance/recurring/:id
+POST /api/v1/finance/recurring/materialize — { year, month } → cria transações do mês para templates ativos (idempotente)
+GET/POST /api/v1/finance/installments — POST atômico: title, total_amount, total_count, first_due; opc: category_id, payment_method, notes
+GET /api/v1/finance/installments/:id — { installment, transactions }
+PATCH /api/v1/finance/installments/:id — só metadados; DELETE cascade
+GET  /api/v1/finance/budgets — sem params: lista; com ?year&month: + usage[{category_id, spent, percent, status}]
+POST /api/v1/finance/budgets — upsert por (user_id, category_id): category_id, monthly_limit, alert_threshold (0-100, def 80)
+PATCH e DELETE /api/v1/finance/budgets/:id
+GET  /api/v1/finance/loans (?status=open|partial|paid&direction=lent|borrowed) — inclui paid e remaining
+POST /api/v1/finance/loans — counterpart_name, direction, principal (>0), taken_on; opc: due_date, notes
+GET /api/v1/finance/loans/:id — { loan(com paid/remaining), payments }
+PATCH e DELETE /api/v1/finance/loans/:id
+GET/POST /api/v1/finance/loans/:id/payments — POST: amount(>0), paid_on, notes? → recalcula status
+PATCH e DELETE /api/v1/finance/loans/:id/payments/:paymentId
+
+# Treino
+GET /api/v1/workout — plano ativo aninhado | ?plan_id=… | ?all=true
+GET/POST /api/v1/workout/plans — POST: name; opc: division_type, is_active (auto-desativa outros)
+GET/PATCH/DELETE /api/v1/workout/plans/:id
+POST /api/v1/workout/days — plan_id, day_letter, name; opc: muscle_groups[], rest_hours, color, order
+GET/PATCH/DELETE /api/v1/workout/days/:id
+POST /api/v1/workout/exercises — day_id, name; opc: sets, reps, rest_seconds, weight_kg, notes, order
+PATCH e DELETE /api/v1/workout/exercises/:id
+GET /api/v1/workout/logs (?from&to&day_id&limit) — histórico de treinos concluídos
+POST /api/v1/workout/logs — opc: day_id, event_id, completed_at, duration_minutes, notes
+PATCH e DELETE /api/v1/workout/logs/:id
+
+# Dieta
+GET /api/v1/diet?date=… (dia) | ?from=…&to=… (até 31 dias)
+POST /api/v1/diet/meals — title; opc: logged_date, meal_time (HH:MM), sort_order
+PATCH e DELETE /api/v1/diet/meals/:id
+POST /api/v1/diet — name, meal_slot_id; opc: logged_date, quantity_text, calories, protein_g, carbs_g, fat_g, notes
+PATCH e DELETE /api/v1/diet/:id
+
+# Preferências
+GET /api/v1/settings | PATCH /api/v1/settings (notifications_enabled, notification_minutes_before, allow_multiple_notifications, telegram_chat_id)
+
+# Backup completo
+GET /api/v1/backup — snapshot único de todos os módulos (escopo backup:read)
 
 Detalhes: ${baseUrl}/docs/api
 

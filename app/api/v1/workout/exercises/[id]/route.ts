@@ -1,29 +1,7 @@
 import { runV1 } from '@/lib/server/v1-handler'
 import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { jsonOk, jsonError } from '@/lib/server/api-auth'
-import type { SupabaseClient } from '@supabase/supabase-js'
-
-async function assertExerciseOwned(admin: SupabaseClient, userId: string, exerciseId: string): Promise<boolean> {
-  const { data: ex, error: e1 } = await admin
-    .from('workout_exercises')
-    .select('id, day_id')
-    .eq('id', exerciseId)
-    .maybeSingle()
-  if (e1 || !ex) return false
-  const { data: day, error: e2 } = await admin
-    .from('workout_days')
-    .select('plan_id')
-    .eq('id', ex.day_id)
-    .maybeSingle()
-  if (e2 || !day) return false
-  const { data: plan, error: e3 } = await admin
-    .from('workout_plans')
-    .select('user_id')
-    .eq('id', day.plan_id)
-    .maybeSingle()
-  if (e3 || !plan || plan.user_id !== userId) return false
-  return true
-}
+import { assertDayOwned, assertExerciseOwned } from '@/lib/server/workout-api'
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   return runV1(request, 'workout:write', async ({ userId }) => {
@@ -46,6 +24,13 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if ('weight_kg' in body) updates.weight_kg = body.weight_kg === null ? null : Number(body.weight_kg)
     if ('notes' in body) updates.notes = body.notes === null ? null : String(body.notes)
     if (typeof body.order === 'number') updates.order = body.order
+    if (typeof body.day_id === 'string' && body.day_id) {
+      const check = await assertDayOwned(admin, userId, body.day_id)
+      if (!check.ok) return jsonError('day_id inválido', 400)
+      updates.day_id = body.day_id
+    }
+
+    if (Object.keys(updates).length === 0) return jsonError('Nenhum campo para atualizar', 400)
 
     const { data, error } = await admin
       .from('workout_exercises')
@@ -56,5 +41,16 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     if (error) return jsonError(error.message, 400)
     return jsonOk(data)
+  })
+}
+
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  return runV1(_request, 'workout:write', async ({ userId }) => {
+    const admin = getSupabaseAdmin()
+    const ok = await assertExerciseOwned(admin, userId, params.id)
+    if (!ok) return jsonError('Exercício não encontrado', 404)
+    const { error } = await admin.from('workout_exercises').delete().eq('id', params.id)
+    if (error) return jsonError(error.message, 400)
+    return jsonOk({ deleted: true, id: params.id })
   })
 }

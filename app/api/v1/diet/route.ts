@@ -3,13 +3,6 @@ import { runV1 } from '@/lib/server/v1-handler'
 import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { jsonOk, jsonError } from '@/lib/server/api-auth'
 
-const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack', 'other'] as const
-type MealType = (typeof MEAL_TYPES)[number]
-
-function isMealType(s: string): s is MealType {
-  return (MEAL_TYPES as readonly string[]).includes(s)
-}
-
 function parseLoggedDate(url: URL): string {
   const d = url.searchParams.get('date')
   if (d) {
@@ -19,35 +12,121 @@ function parseLoggedDate(url: URL): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-const MEAL_RANK: Record<MealType, number> = {
-  breakfast: 0,
-  lunch: 1,
-  snack: 2,
-  dinner: 3,
-  other: 4,
-}
-
-function sortEntries<T extends { meal_type: string; sort_order: number; created_at: string }>(rows: T[]): T[] {
+function sortSlots<T extends { meal_time: string | null; sort_order: number; created_at: string }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => {
-    const mr = MEAL_RANK[a.meal_type as MealType] - MEAL_RANK[b.meal_type as MealType]
-    if (mr !== 0) return mr
+    if (a.meal_time && b.meal_time) return a.meal_time.localeCompare(b.meal_time)
+    if (a.meal_time) return -1
+    if (b.meal_time) return 1
     if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
     return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   })
 }
 
+function sortEntries<T extends { sort_order: number; created_at: string }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  })
+}
+
+/**
+ * GET /api/v1/diet
+ *
+ * Sem nada / `?date=YYYY-MM-DD`: dia único — `{ date, meal_slots: [...] }`.
+ * `?from=YYYY-MM-DD&to=YYYY-MM-DD` (máx 31 dias): `{ from, to, days: [{ date, meal_slots }] }`.
+ */
 export async function GET(request: Request) {
   return runV1(request, 'diet:read', async ({ userId }) => {
     const admin = getSupabaseAdmin()
-    const loggedDate = parseLoggedDate(new URL(request.url))
-    const { data, error } = await admin
-      .from('diet_entries')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('logged_date', loggedDate)
+    const url = new URL(request.url)
+    const from = url.searchParams.get('from')
+    const to = url.searchParams.get('to')
 
-    if (error) return jsonError(error.message, 400)
-    return jsonOk({ date: loggedDate, entries: sortEntries(data ?? []) })
+    if (from && to) {
+      const start = parseISO(from)
+      const end = parseISO(to)
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return jsonError('from/to inválidos (use YYYY-MM-DD)', 400)
+      }
+      const msPerDay = 1000 * 60 * 60 * 24
+      const dayCount = Math.floor((end.getTime() - start.getTime()) / msPerDay) + 1
+      if (dayCount < 1) return jsonError('to deve ser ≥ from', 400)
+      if (dayCount > 31) return jsonError('intervalo máximo: 31 dias', 400)
+
+      const fromStr = from.slice(0, 10)
+      const toStr = to.slice(0, 10)
+
+      const [{ data: slots, error: e1 }, { data: entries, error: e2 }] = await Promise.all([
+        admin
+          .from('diet_meal_slots')
+          .select('*')
+          .eq('user_id', userId)
+          .gte('logged_date', fromStr)
+          .lte('logged_date', toStr),
+        admin
+          .from('diet_entries')
+          .select('*')
+          .eq('user_id', userId)
+          .gte('logged_date', fromStr)
+          .lte('logged_date', toStr),
+      ])
+      if (e1) return jsonError(e1.message, 400)
+      if (e2) return jsonError(e2.message, 400)
+
+      const slotsByDate = new Map<string, typeof slots>()
+      for (const s of slots ?? []) {
+        const arr = slotsByDate.get(s.logged_date) ?? []
+        arr.push(s)
+        slotsByDate.set(s.logged_date, arr)
+      }
+      const entriesBySlot = new Map<string, typeof entries>()
+      for (const e of entries ?? []) {
+        const arr = entriesBySlot.get(e.meal_slot_id) ?? []
+        arr.push(e)
+        entriesBySlot.set(e.meal_slot_id, arr)
+      }
+
+      const days: Array<{ date: string; meal_slots: unknown[] }> = []
+      for (let i = 0; i < dayCount; i += 1) {
+        const d = new Date(start)
+        d.setDate(start.getDate() + i)
+        const dateStr = d.toISOString().slice(0, 10)
+        const daySlots = sortSlots(slotsByDate.get(dateStr) ?? [])
+        const meal_slots = daySlots.map((s) => ({
+          ...s,
+          entries: sortEntries(entriesBySlot.get(s.id) ?? []),
+        }))
+        days.push({ date: dateStr, meal_slots })
+      }
+
+      return jsonOk({ from: fromStr, to: toStr, days })
+    }
+
+    const loggedDate = parseLoggedDate(url)
+
+    const [{ data: slots, error: e1 }, { data: entries, error: e2 }] = await Promise.all([
+      admin.from('diet_meal_slots').select('*').eq('user_id', userId).eq('logged_date', loggedDate),
+      admin.from('diet_entries').select('*').eq('user_id', userId).eq('logged_date', loggedDate),
+    ])
+
+    if (e1) return jsonError(e1.message, 400)
+    if (e2) return jsonError(e2.message, 400)
+
+    const orderedSlots = sortSlots(slots ?? [])
+    const bySlot = new Map<string, typeof entries>()
+    for (const s of orderedSlots) bySlot.set(s.id, [])
+    for (const e of entries ?? []) {
+      const arr = bySlot.get(e.meal_slot_id) ?? []
+      arr.push(e)
+      bySlot.set(e.meal_slot_id, arr)
+    }
+
+    const meal_slots = orderedSlots.map((s) => ({
+      ...s,
+      entries: sortEntries(bySlot.get(s.id) ?? []),
+    }))
+
+    return jsonOk({ date: loggedDate, meal_slots })
   })
 }
 
@@ -63,9 +142,16 @@ export async function POST(request: Request) {
 
     const logged_date =
       typeof body.logged_date === 'string' ? body.logged_date.slice(0, 10) : parseLoggedDate(new URL(request.url))
-    const mealRaw = typeof body.meal_type === 'string' ? body.meal_type : ''
-    if (!isMealType(mealRaw)) {
-      return jsonError('meal_type deve ser: breakfast | lunch | dinner | snack | other', 400)
+    const meal_slot_id = typeof body.meal_slot_id === 'string' ? body.meal_slot_id : ''
+    if (!meal_slot_id) return jsonError('Campo obrigatório: meal_slot_id', 400)
+
+    const { data: slot } = await admin
+      .from('diet_meal_slots')
+      .select('id, user_id, logged_date')
+      .eq('id', meal_slot_id)
+      .maybeSingle()
+    if (!slot || slot.user_id !== userId || slot.logged_date !== logged_date) {
+      return jsonError('Refeição (slot) inválida para esta data', 400)
     }
 
     const name = typeof body.name === 'string' ? body.name.trim() : ''
@@ -80,7 +166,7 @@ export async function POST(request: Request) {
     const insert = {
       user_id: userId,
       logged_date,
-      meal_type: mealRaw,
+      meal_slot_id,
       name,
       quantity_text: typeof body.quantity_text === 'string' ? body.quantity_text.trim() || null : null,
       calories: optNum(body.calories) !== null ? Math.round(optNum(body.calories)!) : null,

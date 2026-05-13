@@ -101,11 +101,27 @@ export async function POST(request: Request) {
       return jsonError('Campos obrigatórios: title, start_time (ISO 8601)', 400)
     }
 
+    const startMs = Date.parse(start_time)
+    if (Number.isNaN(startMs)) {
+      return jsonError('start_time inválido (use ISO 8601)', 400)
+    }
+
+    let end_time: string
+    if (typeof body.end_time === 'string' && body.end_time.trim()) {
+      end_time = body.end_time.trim()
+      if (Number.isNaN(Date.parse(end_time))) {
+        return jsonError('end_time inválido (use ISO 8601)', 400)
+      }
+    } else {
+      // DB exige end_time; clientes (ex.: scripts) podem omitir — default 30 min após início
+      end_time = new Date(startMs + 30 * 60 * 1000).toISOString()
+    }
+
     const insert = {
       user_id: userId,
       title,
       start_time,
-      end_time: typeof body.end_time === 'string' ? body.end_time : null,
+      end_time,
       description: typeof body.description === 'string' ? body.description : null,
       is_recurring: Boolean(body.is_recurring),
       recurrence_days: Array.isArray(body.recurrence_days)

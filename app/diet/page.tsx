@@ -1084,86 +1084,26 @@ export default function DietPage() {
               <h3 className="text-lg font-bold text-gray-900 mb-4">
                 {editingEntry ? 'Editar alimento' : 'Novo alimento'}
               </h3>
-              {activeSlotForModal ? (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs text-gray-700 space-y-1.5 mb-4">
-                  <p>
-                    <span className="font-semibold text-gray-900">Dias da refeição: </span>
-                    {formatRecurrenceDaysLabel(activeSlotForModal.recurrence_days) ??
-                      (activeSlotForModal.logged_date
-                        ? `só ${activeSlotForModal.logged_date}`
-                        : '—')}
-                  </p>
-                  {activeSlotRecurrenceNorm.length ? (
-                    editingEntry?.logged_date ? (
-                      <p className="text-gray-600">
-                        Este item é <strong>só neste dia</strong> ({editingEntry.logged_date}). O modelo da refeição nos
-                        outros dias não muda.
-                      </p>
-                    ) : (
-                      <p className="text-gray-600">
-                        Use os botões abaixo para marcar em quais dias este alimento entra na refeição.
-                      </p>
-                    )
-                  ) : null}
-                </div>
-              ) : null}
               {showItemDayToggles && activeSlotForModal ? (
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 space-y-2 mb-4">
-                  <p className="text-xs font-semibold text-emerald-900">Dias deste alimento</p>
-                  <p className="text-xs text-emerald-800/80 leading-relaxed">
-                    Toque em Dom–Sáb para incluir ou tirar. Ao salvar, se marcar um dia que a refeição ainda não tinha, o
-                    calendário dessa refeição atualiza sozinho.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {WEEKDAY_LABELS.map((label, w) => {
-                      const on = itemEntryWeekdayMask.includes(w)
-                      return (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => toggleItemEntryWeekday(w)}
-                          className={cn(
-                            'rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-colors min-w-[2.5rem]',
-                            on
-                              ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
-                              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
-                          )}
-                        >
-                          {label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <div className="flex flex-wrap gap-3 pt-1">
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-emerald-800 underline decoration-emerald-400 hover:text-emerald-950"
-                      onClick={() => setItemEntryWeekdayMask([...ALL_WEEKDAY_INDICES])}
-                    >
-                      Toda a semana (Dom–Sáb)
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-emerald-800 underline decoration-emerald-400 hover:text-emerald-950"
-                      onClick={() =>
-                        setItemEntryWeekdayMask([...activeSlotRecurrenceNorm])
-                      }
-                    >
-                      Só dias atuais da refeição
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-emerald-800 underline decoration-emerald-400 hover:text-emerald-950"
-                      onClick={() => {
-                        const dow = localDateFromIso(date).getDay()
-                        const rd = itemEntryWeekdayMask.length > 0 ? itemEntryWeekdayMask : activeSlotRecurrenceNorm
-                        const pick = rd.includes(dow) ? dow : rd[0] ?? dow
-                        setItemEntryWeekdayMask([pick])
-                      }}
-                    >
-                      Só um dia
-                    </button>
-                  </div>
+                <div className="mb-4 flex flex-wrap gap-1.5">
+                  {WEEKDAY_LABELS.map((label, w) => {
+                    const on = itemEntryWeekdayMask.includes(w)
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => toggleItemEntryWeekday(w)}
+                        className={cn(
+                          'rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-colors min-w-[2.5rem]',
+                          on
+                            ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                            : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+                        )}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
                 </div>
               ) : null}
               <form onSubmit={handleItemSubmit} className="space-y-4">

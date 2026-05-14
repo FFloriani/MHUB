@@ -184,11 +184,6 @@ export default function DietPage() {
     () => normalizeRecurrenceDays(activeSlotForModal?.recurrence_days) ?? [],
     [activeSlotForModal?.recurrence_days],
   )
-  /** Dias 0–6 que a refeição ainda não cobre (ex.: domingo) — não podem aparecer nos toggles do alimento até serem acrescentados ao slot. */
-  const slotMissingWeekdays = useMemo(
-    () => [0, 1, 2, 3, 4, 5, 6].filter((w) => !activeSlotRecurrenceNorm.includes(w)),
-    [activeSlotRecurrenceNorm],
-  )
   const showItemDayToggles = useMemo(() => {
     if (!activeSlotRecurrenceNorm.length) return false
     if (!editingEntry && itemOnlyThisDay) return false
@@ -1120,52 +1115,47 @@ export default function DietPage() {
               ) : null}
               {showItemDayToggles && activeSlotForModal ? (
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 space-y-2 mb-4">
-                  {slotMissingWeekdays.length > 0 ? (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50/95 px-2.5 py-2 space-y-2">
-                      <p className="text-xs text-amber-950 leading-relaxed">
-                        <span className="font-semibold">Ainda não faz parte desta refeição:</span>{' '}
-                        {slotMissingWeekdays.map((d) => WEEKDAY_LABELS[d]).join(', ')}. Os toggles do alimento só
-                        mostram os dias que a refeição já cobre; use um botão abaixo para{' '}
-                        <strong>incluir o dia no modelo da refeição</strong> (vale para todos os itens desta refeição).
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {slotMissingWeekdays.map((w) => (
-                          <Button
-                            key={w}
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            disabled={saving}
-                            className="text-xs bg-white border-amber-300 text-amber-950 hover:bg-amber-100/90"
-                            onClick={() => void addWeekdayToRecurringMeal(activeSlotForModal.id, w)}
-                          >
-                            Incluir {WEEKDAY_LABELS[w]} na refeição
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
                   <p className="text-xs font-semibold text-emerald-900">Dias deste alimento</p>
                   <p className="text-xs text-emerald-800/80 leading-relaxed">
-                    Toque no dia para ligar ou desligar. Só entram os dias em que a refeição já vale.
+                    <span className="font-medium text-emerald-900">Sólido</span>: dia já na refeição — liga ou desliga o
+                    alimento nesse dia. <span className="font-medium text-amber-900">+tracejado</span>: ainda não está
+                    na refeição — toque para incluir (vale para todos os itens desta refeição).
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {WEEKDAY_LABELS.map((label, w) => {
-                      if (!activeSlotRecurrenceNorm.includes(w)) return null
-                      const on = itemEntryWeekdayMask.includes(w)
+                      const inMeal = activeSlotRecurrenceNorm.includes(w)
+                      if (inMeal) {
+                        const on = itemEntryWeekdayMask.includes(w)
+                        return (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => toggleItemEntryWeekday(w)}
+                            className={cn(
+                              'rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-colors min-w-[2.5rem]',
+                              on
+                                ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+                            )}
+                          >
+                            {label}
+                          </button>
+                        )
+                      }
                       return (
                         <button
                           key={label}
                           type="button"
-                          onClick={() => toggleItemEntryWeekday(w)}
+                          disabled={saving}
+                          onClick={() => void addWeekdayToRecurringMeal(activeSlotForModal.id, w)}
                           className={cn(
-                            'rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-colors min-w-[2.5rem]',
-                            on
-                              ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
-                              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+                            'rounded-lg px-2 py-1.5 text-xs font-semibold border-2 border-dashed transition-colors min-w-[2.65rem]',
+                            'border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100 active:bg-amber-200',
+                            saving && 'opacity-60 cursor-not-allowed',
                           )}
+                          title={`Incluir ${label} na refeição`}
                         >
-                          {label}
+                          +{label}
                         </button>
                       )
                     })}

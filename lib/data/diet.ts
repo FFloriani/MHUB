@@ -24,19 +24,17 @@ export function normalizeRecurrenceDays(raw: unknown): number[] | null {
 }
 
 /** Para item modelo: `null`/vazio = aparece em todos os dias da refeição; senão só nos dias indicados (subset dos dias do slot). */
-export function entryRecurrenceDaysForStorage(
-  slotDays: number[] | null | undefined,
-  selected: number[],
-): number[] | null {
-  if (!slotDays?.length) return null
-  const allowed = new Set(slotDays)
+export function entryRecurrenceDaysForStorage(slotDays: unknown, selected: number[]): number[] | null {
+  const slot = normalizeRecurrenceDays(slotDays)
+  if (!slot?.length) return null
+  const allowed = new Set(slot)
   const uniq = new Set<number>()
   for (const w of selected) {
     if (typeof w === 'number' && w >= 0 && w <= 6 && allowed.has(w)) uniq.add(w)
   }
   if (uniq.size === 0) throw new Error('Selecione pelo menos um dia.')
   const sorted = Array.from(uniq).sort((a, b) => a - b)
-  const slotSorted = [...slotDays].sort((a, b) => a - b)
+  const slotSorted = [...slot].sort((a, b) => a - b)
   if (sorted.length === slotSorted.length && sorted.every((v, i) => v === slotSorted[i])) return null
   return sorted
 }
@@ -56,10 +54,11 @@ export function entryVisibleOnDietDay(
   return er.includes(dow)
 }
 
-export function formatRecurrenceDaysLabel(days: number[] | null | undefined): string | null {
-  if (days == null || !Array.isArray(days) || days.length === 0) return null
-  if (days.length === 7) return 'Todos os dias'
-  return days.map((d) => WEEKDAY_LABELS_PT[d] ?? '?').join(', ')
+export function formatRecurrenceDaysLabel(days: unknown): string | null {
+  const n = normalizeRecurrenceDays(days)
+  if (!n?.length) return null
+  if (n.length === 7) return 'Todos os dias'
+  return n.map((d) => WEEKDAY_LABELS_PT[d] ?? '?').join(', ')
 }
 
 function ymd(d: Date): string {

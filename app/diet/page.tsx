@@ -177,12 +177,16 @@ export default function DietPage() {
   const allEntries = useMemo(() => allEntriesFromDay(meals), [meals])
   const summary = useMemo(() => summarizeDay(allEntries), [allEntries])
   const activeSlotForModal = useMemo(() => meals.find((m) => m.id === activeSlotId) ?? null, [meals, activeSlotId])
+  const activeSlotRecurrenceNorm = useMemo(
+    () => normalizeRecurrenceDays(activeSlotForModal?.recurrence_days) ?? [],
+    [activeSlotForModal?.recurrence_days],
+  )
   const showItemDayToggles = useMemo(() => {
-    if (!activeSlotForModal?.recurrence_days?.length) return false
+    if (!activeSlotRecurrenceNorm.length) return false
     if (!editingEntry && itemOnlyThisDay) return false
     if (editingEntry && editingEntry.logged_date != null && editingEntry.logged_date !== '') return false
     return true
-  }, [activeSlotForModal, editingEntry, itemOnlyThisDay])
+  }, [activeSlotRecurrenceNorm, editingEntry, itemOnlyThisDay])
 
   function openCreateItem(slotId: string) {
     setEditingEntry(null)
@@ -191,8 +195,9 @@ export default function DietPage() {
     setItemOnlyThisDay(false)
     setRepeatWeekdayMask([localDateFromIso(date).getDay()])
     const meal = meals.find((m) => m.id === slotId)
-    if (meal?.recurrence_days?.length) {
-      setItemEntryWeekdayMask([...meal.recurrence_days].sort((a, b) => a - b))
+    const rd = normalizeRecurrenceDays(meal?.recurrence_days)
+    if (rd?.length) {
+      setItemEntryWeekdayMask([...rd])
     } else {
       setItemEntryWeekdayMask([])
     }
@@ -202,8 +207,8 @@ export default function DietPage() {
   function toggleItemEntryWeekday(w: number) {
     setItemEntryWeekdayMask((prev) => {
       const meal = meals.find((m) => m.id === activeSlotId)
-      const allowed = meal?.recurrence_days
-      if (!allowed?.includes(w)) return prev
+      const allowed = normalizeRecurrenceDays(meal?.recurrence_days) ?? []
+      if (!allowed.includes(w)) return prev
       const base = prev.length > 0 ? prev : [...allowed]
       const set = new Set(base)
       if (set.has(w)) {
@@ -242,11 +247,11 @@ export default function DietPage() {
       notes: entry.notes ?? '',
     })
     const meal = meals.find((m) => m.id === entry.meal_slot_id)
-    const slotDays = meal?.recurrence_days
+    const slotDays = normalizeRecurrenceDays(meal?.recurrence_days)
     const isTemplate = entry.logged_date == null || entry.logged_date === ''
     if (slotDays?.length && isTemplate) {
       const er = normalizeRecurrenceDays(entry.recurrence_days)
-      setItemEntryWeekdayMask(er ? [...er] : [...slotDays].sort((a, b) => a - b))
+      setItemEntryWeekdayMask(er ? [...er] : [...slotDays])
     } else {
       setItemEntryWeekdayMask([])
     }
@@ -411,14 +416,15 @@ export default function DietPage() {
       if (editingEntry) {
         const patch: Parameters<typeof updateDietEntry>[2] = { ...payload }
         const meal = meals.find((m) => m.id === editingEntry.meal_slot_id)
+        const mealRec = normalizeRecurrenceDays(meal?.recurrence_days) ?? []
         if (
-          meal?.recurrence_days?.length &&
+          mealRec.length > 0 &&
           (editingEntry.logged_date == null || editingEntry.logged_date === '')
         ) {
           try {
             const mask =
-              itemEntryWeekdayMask.length > 0 ? itemEntryWeekdayMask : [...meal.recurrence_days]
-            patch.recurrence_days = entryRecurrenceDaysForStorage(meal.recurrence_days, mask)
+              itemEntryWeekdayMask.length > 0 ? itemEntryWeekdayMask : [...mealRec]
+            patch.recurrence_days = entryRecurrenceDaysForStorage(meal?.recurrence_days, mask)
           } catch (e) {
             alert(e instanceof Error ? e.message : 'Dias inválidos')
             return
@@ -432,15 +438,14 @@ export default function DietPage() {
           return
         }
 
-        const recurring = Boolean(templateMeal.recurrence_days?.length)
+        const recurring = Boolean(normalizeRecurrenceDays(templateMeal.recurrence_days)?.length)
         if (recurring) {
           let recurrence_days: number[] | null | undefined = undefined
-          if (!itemOnlyThisDay && templateMeal.recurrence_days) {
+          const tplRec = normalizeRecurrenceDays(templateMeal.recurrence_days)
+          if (!itemOnlyThisDay && tplRec?.length) {
             try {
               const mask =
-                itemEntryWeekdayMask.length > 0
-                  ? itemEntryWeekdayMask
-                  : [...templateMeal.recurrence_days]
+                itemEntryWeekdayMask.length > 0 ? itemEntryWeekdayMask : [...tplRec]
               recurrence_days = entryRecurrenceDaysForStorage(templateMeal.recurrence_days, mask)
             } catch (e) {
               alert(e instanceof Error ? e.message : 'Dias inválidos')
@@ -991,7 +996,7 @@ export default function DietPage() {
                         ? `só ${activeSlotForModal.logged_date}`
                         : '—')}
                   </p>
-                  {activeSlotForModal.recurrence_days?.length ? (
+                  {activeSlotRecurrenceNorm.length ? (
                     editingEntry?.logged_date ? (
                       <p className="text-gray-600">
                         Este item é <strong>só neste dia</strong> ({editingEntry.logged_date}). O modelo da refeição nos
@@ -1013,7 +1018,7 @@ export default function DietPage() {
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {WEEKDAY_LABELS.map((label, w) => {
-                      if (!activeSlotForModal.recurrence_days?.includes(w)) return null
+                      if (!activeSlotRecurrenceNorm.includes(w)) return null
                       const on = itemEntryWeekdayMask.includes(w)
                       return (
                         <button
@@ -1037,9 +1042,7 @@ export default function DietPage() {
                       type="button"
                       className="text-xs font-medium text-emerald-800 underline decoration-emerald-400 hover:text-emerald-950"
                       onClick={() =>
-                        setItemEntryWeekdayMask(
-                          [...(activeSlotForModal.recurrence_days ?? [])].sort((a, b) => a - b),
-                        )
+                        setItemEntryWeekdayMask([...activeSlotRecurrenceNorm])
                       }
                     >
                       Todos os dias da refeição
@@ -1049,7 +1052,7 @@ export default function DietPage() {
                       className="text-xs font-medium text-emerald-800 underline decoration-emerald-400 hover:text-emerald-950"
                       onClick={() => {
                         const dow = localDateFromIso(date).getDay()
-                        const rd = activeSlotForModal.recurrence_days ?? []
+                        const rd = activeSlotRecurrenceNorm
                         const pick = rd.includes(dow) ? dow : rd[0]
                         if (pick !== undefined) setItemEntryWeekdayMask([pick])
                       }}
@@ -1117,7 +1120,7 @@ export default function DietPage() {
                     onChange={(e) => setItemForm((f) => ({ ...f, notes: e.target.value }))}
                   />
                 </div>
-                {!editingEntry && activeSlotForModal?.recurrence_days?.length ? (
+                {!editingEntry && activeSlotRecurrenceNorm.length ? (
                   <label className="flex items-start gap-2 text-sm cursor-pointer rounded-lg border border-gray-200 p-3 bg-gray-50/80">
                     <input
                       type="checkbox"
@@ -1134,7 +1137,7 @@ export default function DietPage() {
                     </span>
                   </label>
                 ) : null}
-                {!editingEntry && !activeSlotForModal?.recurrence_days?.length ? (
+                {!editingEntry && !activeSlotRecurrenceNorm.length ? (
                   <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 space-y-2">
                     <p className="text-xs font-semibold text-emerald-900">Repetir nesta semana</p>
                     <p className="text-xs text-emerald-800/80 leading-relaxed">

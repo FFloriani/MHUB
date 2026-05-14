@@ -1,0 +1,15 @@
+---
+description: After code changes, commit and push to GitHub unless user opts out
+alwaysApply: true
+---
+
+# Git: commit e push após alterações
+
+Quando alterares ficheiros neste repositório (código, migrações, etc.):
+
+1. **`git status`** — confirma o que mudou; não incluas artefactos de build (ex.: `.next/`) se estiverem untracked por engano.
+2. **`git add`** dos ficheiros relevantes.
+3. **`git commit -m`** com mensagem clara (preferência: `tipo(âmbito): descrição` em inglês ou português, frase completa no corpo se fizer falta).
+4. **`git push`** para `origin` na branch atual (normalmente `main`).
+
+**Não fazer push** só se o utilizador disser explicitamente para não enviar, ou se não houver alterações para commitar.

@@ -642,7 +642,11 @@ export default function ApiReferencePage() {
           <code className="bg-slate-100 px-1 rounded">logged_date</code>) ou recorrentes semanais ({' '}
           <code className="bg-slate-100 px-1 rounded">recurrence_days</code>: dias 0=domingo … 6=sábado, com{' '}
           <code className="bg-slate-100 px-1 rounded">logged_date</code> nulo). Alimentos em{' '}
-          <code className="bg-slate-100 px-1 rounded">diet_entries</code> por <code className="bg-slate-100 px-1 rounded">meal_slot_id</code>.
+          <code className="bg-slate-100 px-1 rounded">diet_entries</code> por <code className="bg-slate-100 px-1 rounded">meal_slot_id</code>
+          ; no item “modelo” (sem <code className="bg-slate-100 px-1 rounded">logged_date</code>),{' '}
+          <code className="bg-slate-100 px-1 rounded">recurrence_days</code> opcional restringe em quais dias da semana aquele
+          alimento aparece — só valores que já existem nos <code className="bg-slate-100 px-1 rounded">recurrence_days</code>{' '}
+          da refeição (omitir ou <code className="bg-slate-100 px-1 rounded">null</code> = vale todos esses dias).
           Exceções “pular neste dia” ficam em <code className="bg-slate-100 px-1 rounded">diet_recurring_skips</code> (incluídas no{' '}
           <code className="bg-slate-100 px-1 rounded">GET /api/v1/backup</code>). Remover refeição apaga itens em cascata.
         </p>
@@ -694,11 +698,19 @@ export default function ApiReferencePage() {
           <code className="bg-slate-100 px-1 rounded">quantity_text</code>, <code className="bg-slate-100 px-1 rounded">calories</code>,{' '}
           <code className="bg-slate-100 px-1 rounded">protein_g</code>, <code className="bg-slate-100 px-1 rounded">carbs_g</code>,{' '}
           <code className="bg-slate-100 px-1 rounded">fat_g</code>, <code className="bg-slate-100 px-1 rounded">notes</code>,{' '}
-          <code className="bg-slate-100 px-1 rounded">sort_order</code>.
+          <code className="bg-slate-100 px-1 rounded">sort_order</code>, e para modelo em refeição recorrente{' '}
+          <code className="bg-slate-100 px-1 rounded">recurrence_days</code> (subconjunto 0–6 dos dias da refeição;{' '}
+          <code className="bg-slate-100 px-1 rounded">null</code> = todos). Para usar um dia da semana que a refeição ainda não
+          inclui, atualize antes o slot com <strong>PATCH /api/v1/diet/meals/:id</strong> (união de dias); caso contrário o servidor
+          rejeita o item com <strong>400</strong>.
         </p>
         <p className="text-slate-600 text-sm">
           <strong>PATCH / DELETE /api/v1/diet/:id</strong> — item (entrada). <code className="bg-slate-100 px-1 rounded">PATCH</code> aceita os
-          campos do item e opcionalmente <code className="bg-slate-100 px-1 rounded">meal_slot_id</code> (válido para a data do registro). Corpo
+          campos do item e opcionalmente <code className="bg-slate-100 px-1 rounded">meal_slot_id</code> e{' '}
+          <code className="bg-slate-100 px-1 rounded">anchor_date</code> (YYYY-MM-DD) para validar o slot contra um dia concreto.
+          Em item modelo de refeição recorrente, <code className="bg-slate-100 px-1 rounded">recurrence_days</code> (array 0–6 ou{' '}
+          <code className="bg-slate-100 px-1 rounded">null</code>) segue a mesma regra de subconjunto do slot. Itens com data fixa
+          não usam <code className="bg-slate-100 px-1 rounded">recurrence_days</code>. Corpo
           vazio no PATCH → <strong>400</strong>. <code className="bg-slate-100 px-1 rounded">DELETE</code> retorna{' '}
           <code className="bg-slate-100 px-1 rounded text-xs">{`{ "deleted": true, "id": "…" }`}</code>.
         </p>

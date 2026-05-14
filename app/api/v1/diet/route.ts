@@ -3,6 +3,7 @@ import { runV1 } from '@/lib/server/v1-handler'
 import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { jsonOk, jsonError } from '@/lib/server/api-auth'
 import { loadDietDayAdmin, isoWeekday } from '@/lib/server/diet-day'
+import { entryRecurrenceDaysForStorage } from '@/lib/data/diet'
 
 function parseLoggedDate(url: URL): string {
   const d = url.searchParams.get('date')
@@ -111,6 +112,21 @@ export async function POST(request: Request) {
       return Number.isFinite(n) ? n : null
     }
 
+    let entryRecurrence: number[] | null = null
+    if (isRecurring && entryLoggedDate === null && 'recurrence_days' in body) {
+      if (body.recurrence_days === null) {
+        entryRecurrence = null
+      } else if (Array.isArray(body.recurrence_days)) {
+        try {
+          entryRecurrence = entryRecurrenceDaysForStorage(rec, body.recurrence_days)
+        } catch (e) {
+          return jsonError(e instanceof Error ? e.message : 'recurrence_days inválido', 400)
+        }
+      } else {
+        return jsonError('recurrence_days deve ser array 0–6 ou null', 400)
+      }
+    }
+
     const insert = {
       user_id: userId,
       logged_date: entryLoggedDate,
@@ -123,6 +139,7 @@ export async function POST(request: Request) {
       fat_g: optNum(body.fat_g),
       notes: typeof body.notes === 'string' ? body.notes.trim() || null : null,
       sort_order: typeof body.sort_order === 'number' ? body.sort_order : 0,
+      ...(isRecurring && entryLoggedDate === null ? { recurrence_days: entryRecurrence } : {}),
     }
 
     const { data, error } = await admin.from('diet_entries').insert(insert).select().single()

@@ -2,6 +2,7 @@ import { runV1 } from '@/lib/server/v1-handler'
 import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { jsonOk, jsonError } from '@/lib/server/api-auth'
 import { isoWeekday } from '@/lib/server/diet-day'
+import { entryRecurrenceDaysForStorage } from '@/lib/data/diet'
 
 function slotAppliesToDate(slot: {
   logged_date: string | null
@@ -85,6 +86,65 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if ('notes' in body)
       updates.notes = body.notes === null ? null : typeof body.notes === 'string' ? body.notes.trim() || null : undefined
     if (typeof body.sort_order === 'number') updates.sort_order = body.sort_order
+
+    if ('recurrence_days' in body) {
+      const finalSlotId =
+        typeof updates.meal_slot_id === 'string' ? updates.meal_slot_id : existing.meal_slot_id
+
+      const finalLogged: string | null =
+        'logged_date' in updates
+          ? updates.logged_date === null || updates.logged_date === ''
+            ? null
+            : String(updates.logged_date).slice(0, 10)
+          : existing.logged_date != null && existing.logged_date !== ''
+            ? String(existing.logged_date).slice(0, 10)
+            : null
+
+      if (finalLogged != null && finalLogged !== '') {
+        const raw = body.recurrence_days
+        const wantsSubset =
+          raw !== null &&
+          Array.isArray(raw) &&
+          raw.some((x) => typeof x === 'number' && x >= 0 && x <= 6)
+        if (wantsSubset) {
+          return jsonError('Itens com data fixa não usam recurrence_days no item.', 400)
+        }
+      } else {
+        const { data: slot } = await admin
+          .from('diet_meal_slots')
+          .select('recurrence_days')
+          .eq('id', finalSlotId)
+          .maybeSingle()
+        const rec = slot?.recurrence_days as number[] | null
+        if (!rec?.length) {
+          return jsonError('recurrence_days só em refeições recorrentes.', 400)
+        }
+        try {
+          if (body.recurrence_days === null) {
+            updates.recurrence_days = null
+          } else if (Array.isArray(body.recurrence_days)) {
+            updates.recurrence_days = entryRecurrenceDaysForStorage(rec, body.recurrence_days)
+          } else {
+            return jsonError('recurrence_days deve ser array 0–6 ou null.', 400)
+          }
+        } catch (e) {
+          return jsonError(e instanceof Error ? e.message : 'recurrence_days inválido.', 400)
+        }
+      }
+    }
+
+    const finalLoggedAfter: string | null =
+      'logged_date' in updates
+        ? updates.logged_date === null || updates.logged_date === ''
+          ? null
+          : String(updates.logged_date).slice(0, 10)
+        : existing.logged_date != null && existing.logged_date !== ''
+          ? String(existing.logged_date).slice(0, 10)
+          : null
+
+    if (finalLoggedAfter != null && finalLoggedAfter !== '') {
+      updates.recurrence_days = null
+    }
 
     for (const k of Object.keys(updates)) {
       if (updates[k] === undefined) delete updates[k]

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { entryVisibleOnDietDay, normalizeRecurrenceDays } from '@/lib/data/diet'
 
 /** Dia da semana 0–6 para uma data calendário YYYY-MM-DD (UTC meio-dia, estável). */
 export function isoWeekday(dateStr: string): number {
@@ -31,6 +32,7 @@ type EntryRow = {
   fat_g: number | null
   notes: string | null
   sort_order: number
+  recurrence_days: number[] | null
   created_at: string
   updated_at: string
 }
@@ -74,12 +76,13 @@ export async function loadDietDayAdmin(
       .select('*')
       .eq('user_id', userId)
       .is('logged_date', null)
-      .contains('recurrence_days', [dow]),
+      .not('recurrence_days', 'is', null),
   ])
 
   const skipSet = new Set((skips ?? []).map((r: { meal_slot_id: string }) => r.meal_slot_id))
   const a = (oneOff ?? []) as SlotRow[]
-  const b = (recurring ?? []) as SlotRow[]
+  const bRaw = (recurring ?? []) as SlotRow[]
+  const b = bRaw.filter((s) => normalizeRecurrenceDays(s.recurrence_days)?.includes(dow))
   const slots = sortSlots([...a, ...b].filter((s) => !skipSet.has(s.id)))
 
   if (slots.length === 0) return []
@@ -92,10 +95,7 @@ export async function loadDietDayAdmin(
     .in('meal_slot_id', slotIds)
 
   const entries = (allEntries ?? []) as EntryRow[]
-  const filtered = entries.filter((e) => {
-    if (e.logged_date == null || e.logged_date === '') return true
-    return String(e.logged_date).slice(0, 10) === d
-  })
+  const filtered = entries.filter((e) => entryVisibleOnDietDay(e, d))
 
   const bySlot = new Map<string, EntryRow[]>()
   for (const s of slots) bySlot.set(s.id, [])

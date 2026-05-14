@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:apply-diet-postgrest": "node scripts/apply-diet-postgrest.mjs"
+    "db:apply-diet-postgrest": "node scripts/apply-diet-postgrest.mjs",
+    "seed:diet-seg-sab": "node scripts/seed-diet-seg-sab-api.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

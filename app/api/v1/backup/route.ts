@@ -18,7 +18,7 @@ import { jsonOk } from '@/lib/server/api-auth'
  *     user_settings, events, tasks,
  *     finance: { categories, transactions, recurring, installments, budgets, loans, loan_payments },
  *     workout: { plans, days, exercises, logs },
- *     diet: { meal_slots, entries }
+ *     diet: { meal_slots, entries, recurring_skips }
  *   }
  * }
  * ```
@@ -44,6 +44,7 @@ export async function GET(request: Request) {
       logsRes,
       slotsRes,
       entriesRes,
+      skipsRes,
     ] = await Promise.all([
       admin.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
       admin.from('events').select('*').eq('user_id', userId),
@@ -61,6 +62,7 @@ export async function GET(request: Request) {
       admin.from('workout_logs').select('*').eq('user_id', userId),
       admin.from('diet_meal_slots').select('*').eq('user_id', userId),
       admin.from('diet_entries').select('*').eq('user_id', userId),
+      admin.from('diet_recurring_skips').select('*').eq('user_id', userId),
     ])
 
     const planIds = new Set((plansRes.data ?? []).map((p) => p.id))
@@ -94,6 +96,7 @@ export async function GET(request: Request) {
         diet: {
           meal_slots: slotsRes.data ?? [],
           entries: entriesRes.data ?? [],
+          recurring_skips: skipsRes.data ?? [],
         },
       },
     })

@@ -13,15 +13,51 @@ export function normalizeRecurrenceDays(raw: unknown): number[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null
   const set = new Set<number>()
   for (const x of raw) {
-    if (typeof x === 'number' && x >= 0 && x <= 6) set.add(Math.floor(x))
+    let n: number
+    if (typeof x === 'number' && Number.isFinite(x)) n = Math.trunc(x)
+    else if (typeof x === 'string' && /^-?\d+$/.test(x.trim())) n = parseInt(x.trim(), 10)
+    else continue
+    if (n >= 0 && n <= 6) set.add(n)
   }
   if (set.size === 0) return null
   return Array.from(set).sort((a, b) => a - b)
 }
 
-/** Rótulo curto para badge na UI (0=Dom … 6=Sáb). */
+/** Para item modelo: `null`/vazio = aparece em todos os dias da refeição; senão só nos dias indicados (subset dos dias do slot). */
+export function entryRecurrenceDaysForStorage(
+  slotDays: number[] | null | undefined,
+  selected: number[],
+): number[] | null {
+  if (!slotDays?.length) return null
+  const allowed = new Set(slotDays)
+  const uniq = new Set<number>()
+  for (const w of selected) {
+    if (typeof w === 'number' && w >= 0 && w <= 6 && allowed.has(w)) uniq.add(w)
+  }
+  if (uniq.size === 0) throw new Error('Selecione pelo menos um dia.')
+  const sorted = Array.from(uniq).sort((a, b) => a - b)
+  const slotSorted = [...slotDays].sort((a, b) => a - b)
+  if (sorted.length === slotSorted.length && sorted.every((v, i) => v === slotSorted[i])) return null
+  return sorted
+}
+
+/** Se o item entra na lista de um dia (YYYY-MM-DD). */
+export function entryVisibleOnDietDay(
+  entry: Pick<DietEntry, 'logged_date' | 'recurrence_days'>,
+  dayYmd: string,
+): boolean {
+  const d = dayYmd.slice(0, 10)
+  if (entry.logged_date != null && entry.logged_date !== '') {
+    return String(entry.logged_date).slice(0, 10) === d
+  }
+  const dow = localFromYmd(d).getDay()
+  const er = normalizeRecurrenceDays(entry.recurrence_days)
+  if (!er?.length) return true
+  return er.includes(dow)
+}
+
 export function formatRecurrenceDaysLabel(days: number[] | null | undefined): string | null {
-  if (!days?.length) return null
+  if (days == null || !Array.isArray(days) || days.length === 0) return null
   if (days.length === 7) return 'Todos os dias'
   return days.map((d) => WEEKDAY_LABELS_PT[d] ?? '?').join(', ')
 }
@@ -120,7 +156,7 @@ export async function listMealSlotsForDate(userId: string, loggedDate: string): 
       .select('*')
       .eq('user_id', userId)
       .is('logged_date', null)
-      .contains('recurrence_days', [dow]),
+      .not('recurrence_days', 'is', null),
     listSkippedSlotIds(userId, loggedDate),
   ])
 
@@ -128,7 +164,8 @@ export async function listMealSlotsForDate(userId: string, loggedDate: string): 
   if (recurring.error) throw recurring.error
 
   const a = (oneOff.data as DietMealSlot[]) ?? []
-  const b = (recurring.data as DietMealSlot[]) ?? []
+  const bRaw = (recurring.data as DietMealSlot[]) ?? []
+  const b = bRaw.filter((s) => normalizeRecurrenceDays(s.recurrence_days)?.includes(dow))
   const merged = [...a, ...b].filter((s) => !skips.has(s.id))
   return sortSlots(merged)
 }
@@ -325,10 +362,7 @@ export async function loadDietDay(userId: string, loggedDate: string): Promise<D
   if (error) throw error
   const entries = (allEntries as DietEntry[]) ?? []
   const d = loggedDate.slice(0, 10)
-  const filtered = entries.filter((e) => {
-    if (e.logged_date == null || e.logged_date === '') return true
-    return String(e.logged_date).slice(0, 10) === d
-  })
+  const filtered = entries.filter((e) => entryVisibleOnDietDay(e, d))
 
   const bySlot = new Map<string, DietEntry[]>()
   for (const s of slots) bySlot.set(s.id, [])
@@ -357,12 +391,19 @@ export async function createDietEntry(
     fat_g?: number | null
     notes?: string | null
     sort_order?: number
+    recurrence_days?: number[] | null
   },
 ): Promise<DietEntry> {
   const logged =
     payload.logged_date === null || payload.logged_date === ''
       ? null
       : payload.logged_date.slice(0, 10)
+
+  let recurrence_days: number[] | null = null
+  if (logged == null && payload.recurrence_days !== undefined) {
+    const n = normalizeRecurrenceDays(payload.recurrence_days)
+    recurrence_days = n && n.length > 0 ? n : null
+  }
 
   const { data, error } = await supabase
     .from('diet_entries')
@@ -378,6 +419,7 @@ export async function createDietEntry(
       fat_g: payload.fat_g ?? null,
       notes: payload.notes?.trim() || null,
       sort_order: payload.sort_order ?? 0,
+      recurrence_days,
     })
     .select()
     .single()
@@ -402,6 +444,7 @@ export async function updateDietEntry(
       | 'notes'
       | 'sort_order'
       | 'logged_date'
+      | 'recurrence_days'
     >
   >,
 ): Promise<DietEntry> {
@@ -418,6 +461,25 @@ export async function updateDietEntry(
   if (patch.logged_date !== undefined) {
     updates.logged_date =
       patch.logged_date === null || patch.logged_date === '' ? null : patch.logged_date.slice(0, 10)
+  }
+  if (patch.recurrence_days !== undefined) {
+    if (patch.recurrence_days === null) {
+      updates.recurrence_days = null
+    } else {
+      const n = normalizeRecurrenceDays(patch.recurrence_days)
+      updates.recurrence_days = n && n.length > 0 ? n : null
+    }
+  }
+
+  const { data: row } = await supabase
+    .from('diet_entries')
+    .select('logged_date')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .single()
+  const ld = updates.logged_date !== undefined ? updates.logged_date : row?.logged_date
+  if (ld != null && ld !== '' && updates.recurrence_days !== undefined) {
+    updates.recurrence_days = null
   }
 
   const { data, error } = await supabase

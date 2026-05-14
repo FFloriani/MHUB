@@ -631,6 +631,7 @@ export type Database = {
           fat_g: number | null
           notes: string | null
           sort_order: number
+          recurrence_days: number[] | null
           created_at: string
           updated_at: string
         }
@@ -647,6 +648,7 @@ export type Database = {
           fat_g?: number | null
           notes?: string | null
           sort_order?: number
+          recurrence_days?: number[] | null
         }
         Update: {
           id?: string
@@ -661,6 +663,7 @@ export type Database = {
           fat_g?: number | null
           notes?: string | null
           sort_order?: number
+          recurrence_days?: number[] | null
         }
       }
       subjects: {

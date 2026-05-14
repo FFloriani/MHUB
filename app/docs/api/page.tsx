@@ -638,10 +638,13 @@ export default function ApiReferencePage() {
       <section id="diet" className="mb-14 scroll-mt-20">
         <h2 className="text-xl font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4">Dieta</h2>
         <p className="text-slate-600 text-sm mb-4">
-          Refeições por dia em <code className="bg-slate-100 px-1 rounded">diet_meal_slots</code> (título, hora opcional{' '}
-          <code className="bg-slate-100 px-1 rounded">meal_time</code>) e alimentos em{' '}
-          <code className="bg-slate-100 px-1 rounded">diet_entries</code> ligados por{' '}
-          <code className="bg-slate-100 px-1 rounded">meal_slot_id</code>. Ao remover uma refeição, os itens são apagados em cascata.
+          Refeições em <code className="bg-slate-100 px-1 rounded">diet_meal_slots</code> — pontuais (uma{' '}
+          <code className="bg-slate-100 px-1 rounded">logged_date</code>) ou recorrentes semanais ({' '}
+          <code className="bg-slate-100 px-1 rounded">recurrence_days</code>: dias 0=domingo … 6=sábado, com{' '}
+          <code className="bg-slate-100 px-1 rounded">logged_date</code> nulo). Alimentos em{' '}
+          <code className="bg-slate-100 px-1 rounded">diet_entries</code> por <code className="bg-slate-100 px-1 rounded">meal_slot_id</code>.
+          Exceções “pular neste dia” ficam em <code className="bg-slate-100 px-1 rounded">diet_recurring_skips</code> (incluídas no{' '}
+          <code className="bg-slate-100 px-1 rounded">GET /api/v1/backup</code>). Remover refeição apaga itens em cascata.
         </p>
         <Table
           headers={['Método', 'Rota', 'Escopo']}
@@ -666,21 +669,28 @@ export default function ApiReferencePage() {
           <code className="bg-slate-100 px-1 rounded">sort_order</code> e criação.
         </p>
         <p className="text-slate-600 text-sm mb-2">
-          <strong>POST /api/v1/diet/meals</strong> — obrigatório: <code className="bg-slate-100 px-1 rounded">title</code>. Opcionais:{' '}
-          <code className="bg-slate-100 px-1 rounded">logged_date</code> (default hoje),{' '}
-          <code className="bg-slate-100 px-1 rounded">meal_time</code> (<code className="bg-slate-100 px-1 rounded">HH:MM</code> ou{' '}
-          <code className="bg-slate-100 px-1 rounded">HH:MM:SS</code>), <code className="bg-slate-100 px-1 rounded">sort_order</code>.
+          <strong>POST /api/v1/diet/meals</strong> — obrigatório: <code className="bg-slate-100 px-1 rounded">title</code>. Ou bem{' '}
+          <code className="bg-slate-100 px-1 rounded">recurrence_days</code> (array de inteiros 0–6) para refeição semanal, ou refeição pontual com{' '}
+          <code className="bg-slate-100 px-1 rounded">logged_date</code> (default hoje se não houver recorrência). Opcionais:{' '}
+          <code className="bg-slate-100 px-1 rounded">meal_time</code>, <code className="bg-slate-100 px-1 rounded">sort_order</code>.
         </p>
         <p className="text-slate-600 text-sm mb-2">
-          <strong>PATCH / DELETE /api/v1/diet/meals/:id</strong> — atualizar ou remover a refeição do dia.{' '}
-          <code className="bg-slate-100 px-1 rounded">PATCH</code>: opcionais <code className="bg-slate-100 px-1 rounded">title</code>,{' '}
+          <strong>PATCH / DELETE /api/v1/diet/meals/:id</strong> — atualizar ou remover a refeição.{' '}
+          <code className="bg-slate-100 px-1 rounded">PATCH</code>: <code className="bg-slate-100 px-1 rounded">title</code>,{' '}
           <code className="bg-slate-100 px-1 rounded">meal_time</code> (<code className="bg-slate-100 px-1 rounded">null</code> para limpar),{' '}
-          <code className="bg-slate-100 px-1 rounded">sort_order</code>, <code className="bg-slate-100 px-1 rounded">logged_date</code>.
+          <code className="bg-slate-100 px-1 rounded">sort_order</code>, <code className="bg-slate-100 px-1 rounded">recurrence_days</code> e/ou{' '}
+          <code className="bg-slate-100 px-1 rounded">logged_date</code>: ao enviar <code className="bg-slate-100 px-1 rounded">recurrence_days</code> valida a
+          semana (e zera <code className="bg-slate-100 px-1 rounded">logged_date</code>); array vazio exige{' '}
+          <code className="bg-slate-100 px-1 rounded">logged_date</code> para virar pontual; só{' '}
+          <code className="bg-slate-100 px-1 rounded">logged_date</code> sem a chave de recorrência força pontual (zera recorrência).
         </p>
         <p className="text-slate-600 text-sm mb-2">
           <strong>POST /api/v1/diet</strong> — obrigatórios: <code className="bg-slate-100 px-1 rounded">name</code>,{' '}
-          <code className="bg-slate-100 px-1 rounded">meal_slot_id</code> (slot do mesmo <code className="bg-slate-100 px-1 rounded">logged_date</code>).
-          Opcionais: <code className="bg-slate-100 px-1 rounded">logged_date</code>,{' '}
+          <code className="bg-slate-100 px-1 rounded">meal_slot_id</code>. Para slot pontual, a data do item deve bater com o slot; para slot
+          recorrente, o dia consultado deve estar em <code className="bg-slate-100 px-1 rounded">recurrence_days</code>. Item “modelo” (vale todos os
+          dias): omita <code className="bg-slate-100 px-1 rounded">per_day</code> ou use <code className="bg-slate-100 px-1 rounded">false</code> —{' '}
+          <code className="bg-slate-100 px-1 rounded">logged_date</code> no registro fica nulo. Só para aquele dia:{' '}
+          <code className="bg-slate-100 px-1 rounded">per_day: true</code> e <code className="bg-slate-100 px-1 rounded">logged_date</code> no corpo. Opcionais:{' '}
           <code className="bg-slate-100 px-1 rounded">quantity_text</code>, <code className="bg-slate-100 px-1 rounded">calories</code>,{' '}
           <code className="bg-slate-100 px-1 rounded">protein_g</code>, <code className="bg-slate-100 px-1 rounded">carbs_g</code>,{' '}
           <code className="bg-slate-100 px-1 rounded">fat_g</code>, <code className="bg-slate-100 px-1 rounded">notes</code>,{' '}
@@ -719,7 +729,7 @@ export default function ApiReferencePage() {
       "budgets":    [ … ], "loans": [ … ], "loan_payments": [ … ]
     },
     "workout": { "plans": [ … ], "days": [ … ], "exercises": [ … ], "logs": [ … ] },
-    "diet":    { "meal_slots": [ … ], "entries": [ … ] }
+    "diet":    { "meal_slots": [ … ], "entries": [ … ], "recurring_skips": [ … ] }
   }
 }`}
         </JsonExample>

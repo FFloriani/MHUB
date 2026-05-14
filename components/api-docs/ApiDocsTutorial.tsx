@@ -120,9 +120,10 @@ PATCH e DELETE /api/v1/workout/logs/:id
 
 # Dieta
 GET /api/v1/diet?date=… (dia) | ?from=…&to=… (até 31 dias)
-POST /api/v1/diet/meals — title; opc: logged_date, meal_time (HH:MM), sort_order
-PATCH e DELETE /api/v1/diet/meals/:id
-POST /api/v1/diet — name, meal_slot_id; opc: logged_date, quantity_text, calories, protein_g, carbs_g, fat_g, notes
+POST /api/v1/diet/meals — title; recorrente: recurrence_days [0–6] OU pontual: logged_date; opc: meal_time, sort_order
+PATCH /api/v1/diet/meals/:id — title, meal_time, sort_order, recurrence_days, logged_date (ver doc: pontual vs recorrente)
+DELETE /api/v1/diet/meals/:id
+POST /api/v1/diet — name, meal_slot_id; recorrente: opc. per_day + logged_date (item só naquele dia); demais campos nutricionais
 PATCH e DELETE /api/v1/diet/:id
 
 # Preferências

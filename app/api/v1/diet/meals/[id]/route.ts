@@ -2,6 +2,18 @@ import { runV1 } from '@/lib/server/v1-handler'
 import { getSupabaseAdmin } from '@/lib/server/supabase-admin'
 import { jsonOk, jsonError } from '@/lib/server/api-auth'
 
+/** Normaliza inteiros 0–6 únicos e ordenados (igual POST /diet/meals). */
+function normalizeRecurrenceDays(body: Record<string, unknown>): number[] | null {
+  const raw = body.recurrence_days
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const set = new Set<number>()
+  for (const x of raw) {
+    if (typeof x === 'number' && x >= 0 && x <= 6) set.add(Math.floor(x))
+  }
+  if (set.size === 0) return null
+  return Array.from(set).sort((a, b) => a - b)
+}
+
 function parseMealTime(v: unknown): string | null | undefined {
   if (v === undefined) return undefined
   if (v === null || v === '') return null
@@ -45,7 +57,28 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       }
     }
     if (typeof body.sort_order === 'number') updates.sort_order = body.sort_order
-    if (typeof body.logged_date === 'string') updates.logged_date = body.logged_date.slice(0, 10)
+
+    const hasRecurrenceKey = 'recurrence_days' in body
+    if (hasRecurrenceKey) {
+      const recNorm = normalizeRecurrenceDays(body)
+      if (recNorm !== null && recNorm.length > 0) {
+        updates.recurrence_days = recNorm
+        updates.logged_date = null
+      } else {
+        const d = typeof body.logged_date === 'string' ? body.logged_date.trim().slice(0, 10) : ''
+        if (!d) {
+          return jsonError(
+            'Para refeição pontual informe logged_date (YYYY-MM-DD); para recorrente use recurrence_days com dias 0–6',
+            400,
+          )
+        }
+        updates.recurrence_days = null
+        updates.logged_date = d
+      }
+    } else if (typeof body.logged_date === 'string' && body.logged_date.trim()) {
+      updates.logged_date = body.logged_date.trim().slice(0, 10)
+      updates.recurrence_days = null
+    }
 
     if (Object.keys(updates).length === 0) return jsonError('Nenhum campo para atualizar', 400)
 

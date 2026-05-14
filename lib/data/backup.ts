@@ -16,6 +16,7 @@ type FinanceLoan = Tables['finance_loans']['Row']
 type FinanceLoanPayment = Tables['finance_loan_payments']['Row']
 type DietEntry = Tables['diet_entries']['Row']
 type DietMealSlot = Tables['diet_meal_slots']['Row']
+type DietRecurringSkip = Tables['diet_recurring_skips']['Row']
 
 export interface BackupData {
     version: number
@@ -35,6 +36,8 @@ export interface BackupData {
         /** Presente a partir do módulo Dieta (backup v2+). */
         dietMealSlots?: DietMealSlot[]
         dietEntries?: DietEntry[]
+        /** Exceções “pular neste dia” para refeições recorrentes (backup após recorrência). */
+        dietRecurringSkips?: DietRecurringSkip[]
     }
 }
 
@@ -90,7 +93,8 @@ export async function exportFullBackup(userId: string): Promise<BackupData> {
         .from('diet_meal_slots')
         .select('*')
         .eq('user_id', userId)
-        .order('logged_date', { ascending: true })
+        .order('sort_order', { ascending: true })
+        .order('id', { ascending: true })
 
     if (dietSlotsError) throw new Error('Falha ao exportar refeições da dieta: ' + dietSlotsError.message)
 
@@ -98,9 +102,18 @@ export async function exportFullBackup(userId: string): Promise<BackupData> {
         .from('diet_entries')
         .select('*')
         .eq('user_id', userId)
-        .order('logged_date', { ascending: true })
+        .order('logged_date', { ascending: true, nullsFirst: true })
+        .order('id', { ascending: true })
 
     if (dietError) throw new Error('Falha ao exportar dieta: ' + dietError.message)
+
+    const { data: dietRecurringSkips, error: skipsError } = await supabase
+        .from('diet_recurring_skips')
+        .select('*')
+        .eq('user_id', userId)
+        .order('skip_date', { ascending: true })
+
+    if (skipsError) throw new Error('Falha ao exportar exceções da dieta: ' + skipsError.message)
 
     return {
         version: 2,
@@ -119,6 +132,7 @@ export async function exportFullBackup(userId: string): Promise<BackupData> {
             financeLoanPayments: loanPaymentsRes.data || [],
             dietMealSlots: dietMealSlots || [],
             dietEntries: dietEntries || [],
+            dietRecurringSkips: dietRecurringSkips || [],
         },
     }
 }
@@ -140,6 +154,7 @@ export async function restoreFullBackup(userId: string, backup: BackupData): Pro
     await supabase.from('finance_recurring').delete().eq('user_id', userId)
     await supabase.from('finance_categories').delete().eq('user_id', userId)
 
+    await supabase.from('diet_recurring_skips').delete().eq('user_id', userId)
     await supabase.from('diet_entries').delete().eq('user_id', userId)
     await supabase.from('diet_meal_slots').delete().eq('user_id', userId)
 
@@ -170,6 +185,13 @@ export async function restoreFullBackup(userId: string, backup: BackupData): Pro
     if (backup.data.dietMealSlots?.length) {
         const { error } = await supabase.from('diet_meal_slots').insert(sanitize(backup.data.dietMealSlots))
         if (error) throw new Error('Erro ao restaurar refeições da dieta: ' + error.message)
+    }
+
+    if (backup.data.dietRecurringSkips?.length) {
+        const { error } = await supabase
+            .from('diet_recurring_skips')
+            .insert(sanitize(backup.data.dietRecurringSkips))
+        if (error) throw new Error('Erro ao restaurar exceções da dieta: ' + error.message)
     }
 
     if (backup.data.dietEntries?.length) {

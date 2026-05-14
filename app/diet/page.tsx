@@ -113,6 +113,9 @@ export default function DietPage() {
   const [editingMealId, setEditingMealId] = useState<string | null>(null)
   const [editMealTitle, setEditMealTitle] = useState('')
   const [editMealTime, setEditMealTime] = useState('')
+  /** Refeição recorrente em edição: máscara de dias (0=Dom … 6=Sáb). */
+  const [editMealRecurrenceMask, setEditMealRecurrenceMask] = useState<number[]>([])
+  const [editMealIsRecurring, setEditMealIsRecurring] = useState(false)
   const weekSelectedBtnRef = useRef<HTMLButtonElement>(null)
 
   const load = useCallback(async () => {
@@ -271,12 +274,31 @@ export default function DietPage() {
     setEditingMealId(m.id)
     setEditMealTitle(m.title)
     setEditMealTime(mealTimeToInput(m.meal_time))
+    const rd = normalizeRecurrenceDays(m.recurrence_days)
+    const isRec = Boolean(rd?.length)
+    setEditMealIsRecurring(isRec)
+    setEditMealRecurrenceMask(isRec && rd ? [...rd] : [])
   }
 
   function cancelEditMeal() {
     setEditingMealId(null)
     setEditMealTitle('')
     setEditMealTime('')
+    setEditMealIsRecurring(false)
+    setEditMealRecurrenceMask([])
+  }
+
+  function toggleEditMealWeekday(w: number) {
+    setEditMealRecurrenceMask((prev) => {
+      const set = new Set(prev.length > 0 ? prev : [0, 1, 2, 3, 4, 5, 6])
+      if (set.has(w)) {
+        if (set.size <= 1) return Array.from(set).sort((a, b) => a - b)
+        set.delete(w)
+      } else {
+        set.add(w)
+      }
+      return Array.from(set).sort((a, b) => a - b)
+    })
   }
 
   async function saveEditMeal(slotId: string) {
@@ -285,10 +307,19 @@ export default function DietPage() {
     if (!title) return
     setSaving(true)
     try {
-      await updateMealSlot(user.id, slotId, {
+      const patch: Parameters<typeof updateMealSlot>[2] = {
         title,
         meal_time: inputTimeToPg(editMealTime),
-      })
+      }
+      if (editMealIsRecurring) {
+        const rec = normalizeRecurrenceDays(editMealRecurrenceMask)
+        if (!rec?.length) {
+          alert('Selecione pelo menos um dia da semana para esta refeição recorrente.')
+          return
+        }
+        patch.recurrence_days = rec
+      }
+      await updateMealSlot(user.id, slotId, patch)
       cancelEditMeal()
       await load()
     } catch (err) {
@@ -706,27 +737,75 @@ export default function DietPage() {
                 <Card className="overflow-hidden border-emerald-100/80">
                   <div className="px-4 py-3 bg-gradient-to-r from-emerald-50/90 to-white border-b border-emerald-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     {editingMealId === meal.id ? (
-                      <div className="flex flex-col sm:flex-row gap-2 flex-1 items-stretch sm:items-end">
-                        <div className="flex-1">
-                          <label className="text-xs text-gray-500">Nome</label>
-                          <Input
-                            value={editMealTitle}
-                            onChange={(e) => setEditMealTitle(e.target.value)}
-                            className="mt-0.5"
-                          />
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 flex-1 w-full min-w-0">
+                        <div className="flex flex-col gap-2 flex-1 min-w-0">
+                          <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                            <div className="flex-1">
+                              <label className="text-xs text-gray-500">Nome</label>
+                              <Input
+                                value={editMealTitle}
+                                onChange={(e) => setEditMealTitle(e.target.value)}
+                                className="mt-0.5"
+                              />
+                            </div>
+                            <div className="w-full sm:w-32">
+                              <label className="text-xs text-gray-500 flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> Hora
+                              </label>
+                              <input
+                                type="time"
+                                value={editMealTime}
+                                onChange={(e) => setEditMealTime(e.target.value)}
+                                className="mt-0.5 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                              />
+                            </div>
+                          </div>
+                          {editMealIsRecurring ? (
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-2 w-full">
+                              <p className="text-xs font-semibold text-emerald-900">Dias da refeição (repetir toda semana)</p>
+                              <p className="text-xs text-emerald-800/90">
+                                Inclua <strong>Dom</strong> aqui se quiser que a refeição e os alimentos também vão para domingo.
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {WEEKDAY_LABELS.map((label, w) => {
+                                  const on = editMealRecurrenceMask.includes(w)
+                                  return (
+                                    <button
+                                      key={label}
+                                      type="button"
+                                      onClick={() => toggleEditMealWeekday(w)}
+                                      className={cn(
+                                        'rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-colors min-w-[2.5rem]',
+                                        on
+                                          ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                                          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+                                      )}
+                                    >
+                                      {label}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                              <div className="flex flex-wrap gap-3 pt-0.5">
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-emerald-800 underline decoration-emerald-400"
+                                  onClick={() => setEditMealRecurrenceMask([0, 1, 2, 3, 4, 5, 6])}
+                                >
+                                  Toda a semana
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-emerald-800 underline decoration-emerald-400"
+                                  onClick={() => setEditMealRecurrenceMask([1, 2, 3, 4, 5])}
+                                >
+                                  Seg–Sex
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
-                        <div className="w-full sm:w-32">
-                          <label className="text-xs text-gray-500 flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> Hora
-                          </label>
-                          <input
-                            type="time"
-                            value={editMealTime}
-                            onChange={(e) => setEditMealTime(e.target.value)}
-                            className="mt-0.5 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                          />
-                        </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 shrink-0">
                           <Button type="button" size="sm" variant="secondary" onClick={cancelEditMeal}>
                             Cancelar
                           </Button>
@@ -769,7 +848,7 @@ export default function DietPage() {
                           variant="ghost"
                           className="text-gray-600 gap-1"
                           onClick={() => startEditMeal(meal)}
-                          title="Editar nome e horário da refeição"
+                          title="Editar nome, horário e dias da refeição"
                         >
                           <Pencil className="w-4 h-4" />
                           <span className="hidden sm:inline text-xs">Editar</span>
